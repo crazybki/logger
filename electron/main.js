@@ -25,7 +25,13 @@ if (process.platform === "win32") {
 }
 
 function getIconPath() {
-  return path.join(app.getAppPath(), "build", "icon.ico");
+  const candidates = [
+    path.join(__dirname, "..", "build", "icon.ico"),
+    path.join(app.getAppPath(), "build", "icon.ico"),
+    path.join(process.resourcesPath || "", "build", "icon.ico"),
+  ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) || candidates[0];
 }
 
 function showMainWindow() {
@@ -47,7 +53,13 @@ function sendRendererAction(channel) {
 function createTray() {
   if (tray) return;
 
-  tray = new Tray(getIconPath());
+  try {
+    tray = new Tray(getIconPath());
+  } catch (error) {
+    console.error("Could not create tray icon:", error);
+    return;
+  }
+
   tray.setToolTip("Time Logger");
   tray.setContextMenu(Menu.buildFromTemplate([
     {

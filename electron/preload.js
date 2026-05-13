@@ -9,6 +9,7 @@ const makeShortcutListener = (channel) => (callback) => {
 contextBridge.exposeInMainWorld("loggerAPI", {
   exportEntriesToCSV: (entries) => ipcRenderer.invoke("log:export-entries", entries),
   importTicketsFromFile: () => ipcRenderer.invoke("tickets:import-file"),
+  showNotification: (options) => ipcRenderer.invoke("notification:show", options),
 
   setMiniMode: (isMini) => ipcRenderer.send("window:set-mini-mode", isMini),
   minimizeWindow: () => ipcRenderer.send("window:minimize"),
@@ -17,6 +18,7 @@ contextBridge.exposeInMainWorld("loggerAPI", {
   onShortcutStart: makeShortcutListener("shortcut:start"),
   onShortcutPause: makeShortcutListener("shortcut:pause"),
   onShortcutFinish: makeShortcutListener("shortcut:finish"),
+  onToggleMiniMode: makeShortcutListener("tray:toggle-mini-mode"),
   onPowerResume: makeShortcutListener("power:resume"),
   onPowerSuspend: makeShortcutListener("power:suspend"),
 });

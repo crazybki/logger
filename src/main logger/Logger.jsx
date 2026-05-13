@@ -128,6 +128,8 @@ function Logger() {
   const manualTicketRef = useRef(null);
   const mainSearchRef = useRef(null);
   const miniTicketRef = useRef(null);
+  const dailyTargetNotificationRef = useRef("");
+  const taskNotificationRef = useRef("");
 
   const [jiraTickets, setJiraTickets] = useState(() => {
     try {
@@ -607,6 +609,45 @@ function Logger() {
   }, [isMiniMode]);
 
   useEffect(() => {
+    if (!window.loggerAPI?.showNotification) return;
+
+    const notificationKey = `${todayDateKey}:${dailyTargetSeconds}`;
+
+    if (todayLoggedSeconds < dailyTargetSeconds) {
+      if (dailyTargetNotificationRef.current.startsWith(`${todayDateKey}:`)) {
+        dailyTargetNotificationRef.current = "";
+      }
+      return;
+    }
+
+    if (dailyTargetNotificationRef.current === notificationKey) return;
+
+    dailyTargetNotificationRef.current = notificationKey;
+    window.loggerAPI.showNotification({
+      title: "Daily target reached",
+      body: `Logged ${formatTimeShort(todayLoggedSeconds)} today.`,
+    });
+  }, [dailyTargetSeconds, todayDateKey, todayLoggedSeconds]);
+
+  useEffect(() => {
+    if (!window.loggerAPI?.showNotification || !activeReminderTask) return;
+
+    const notificationKey = [
+      activeReminderTask.id,
+      activeReminderTask.reminder,
+      activeReminderTask.snoozedUntil || "",
+    ].join(":");
+
+    if (taskNotificationRef.current === notificationKey) return;
+
+    taskNotificationRef.current = notificationKey;
+    window.loggerAPI.showNotification({
+      title: "Task reminder",
+      body: activeReminderTask.title,
+    });
+  }, [activeReminderTask]);
+
+  useEffect(() => {
     const runningEntry = activeEntries.find((entry) => entry.status === "running");
 
     if (!runningEntry) {
@@ -796,10 +837,15 @@ function Logger() {
       }
     });
 
+    const offToggleMiniMode = window.loggerAPI.onToggleMiniMode?.(() => {
+      setIsMiniMode((prev) => !prev);
+    });
+
     return () => {
       offStart?.();
       offPause?.();
       offFinish?.();
+      offToggleMiniMode?.();
     };
   }, [activeEntryId, selectedTicket, isMiniMode, miniTicket]);
 

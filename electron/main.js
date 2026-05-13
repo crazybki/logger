@@ -1,6 +1,9 @@
 const {
   app,
   BrowserWindow,
+  Menu,
+  Notification,
+  Tray,
   ipcMain,
   globalShortcut,
   dialog,
@@ -11,9 +14,76 @@ const fs = require("fs");
 const XLSX = require("xlsx");
 
 let mainWindow;
+let tray;
+let isQuitting = false;
 
 const NORMAL_SIZE = { width: 400, height: 700 };
 const MINI_SIZE = { width: 420, height: 305 };
+
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.attensi.timelogger");
+}
+
+function getIconPath() {
+  return path.join(app.getAppPath(), "build", "icon.ico");
+}
+
+function showMainWindow() {
+  if (!mainWindow) {
+    createWindow();
+    return;
+  }
+
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function sendRendererAction(channel) {
+  showMainWindow();
+  mainWindow?.webContents.send(channel);
+}
+
+function createTray() {
+  if (tray) return;
+
+  tray = new Tray(getIconPath());
+  tray.setToolTip("Time Logger");
+  tray.setContextMenu(Menu.buildFromTemplate([
+    {
+      label: "Show Time Logger",
+      click: showMainWindow,
+    },
+    { type: "separator" },
+    {
+      label: "Start current ticket",
+      click: () => sendRendererAction("shortcut:start"),
+    },
+    {
+      label: "Pause",
+      click: () => sendRendererAction("shortcut:pause"),
+    },
+    {
+      label: "Finish current ticket",
+      click: () => sendRendererAction("shortcut:finish"),
+    },
+    {
+      label: "Toggle mini mode",
+      click: () => sendRendererAction("tray:toggle-mini-mode"),
+    },
+    { type: "separator" },
+    {
+      label: "Quit",
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]));
+
+  tray.on("click", showMainWindow);
+  tray.on("double-click", showMainWindow);
+}
 
 function csvEscape(value) {
   return `"${String(value ?? "").replace(/"/g, '""')}"`;
@@ -29,7 +99,7 @@ function createWindow() {
     alwaysOnTop: true,
     autoHideMenuBar: true,
     frame: false,
-    icon: path.join(app.getAppPath(), "build", "icon.ico"),
+    icon: getIconPath(),
     backgroundColor: "#111111",
     webPreferences: {
       nodeIntegration: false,
@@ -46,6 +116,13 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
+
+  mainWindow.on("close", (event) => {
+    if (isQuitting) return;
+
+    event.preventDefault();
+    mainWindow.hide();
+  });
 }
 
 function setMiniMode(isMini) {
@@ -87,6 +164,24 @@ ipcMain.on("window:minimize", () => {
 
 ipcMain.on("window:close", () => {
   mainWindow?.close();
+});
+
+ipcMain.handle("notification:show", (_, options = {}) => {
+  if (!Notification.isSupported()) {
+    return { ok: false, unsupported: true };
+  }
+
+  const notification = new Notification({
+    title: String(options.title || "Time Logger"),
+    body: String(options.body || ""),
+    icon: getIconPath(),
+    silent: Boolean(options.silent),
+  });
+
+  notification.on("click", showMainWindow);
+  notification.show();
+
+  return { ok: true };
 });
 
 ipcMain.handle("log:export-entries", async (_, entries) => {
@@ -359,6 +454,7 @@ ipcMain.handle("tickets:import-file", async () => {
 
 app.whenReady().then(() => {
   createWindow();
+  createTray();
   registerShortcuts();
 
   powerMonitor.on("resume", () => {
@@ -381,11 +477,12 @@ app.whenReady().then(() => {
 });
 
 app.on("will-quit", () => {
+  isQuitting = true;
   globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  if (isQuitting && process.platform !== "darwin") {
     app.quit();
   }
 });

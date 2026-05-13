@@ -16,6 +16,7 @@ import {
   getDateKeyFromDate,
   getWeekdayLabel,
 } from "../utils/reporting";
+import { ACCENT_COLORS, applyTheme } from "../utils/themes";
 
 function Logger() {
   const [search, setSearch] = useState("");
@@ -32,6 +33,20 @@ function Logger() {
   const [missingTimeFilter, setMissingTimeFilter] = useState("missing");
   const [trashTab, setTrashTab] = useState("tickets");
   const [trashSearch, setTrashSearch] = useState("");
+  const [themePreset, setThemePreset] = useState(() => {
+    try {
+      return localStorage.getItem("themePreset") || "default";
+    } catch {
+      return "default";
+    }
+  });
+  const [themeAccentColor, setThemeAccentColor] = useState(() => {
+    try {
+      return localStorage.getItem("themeAccentColor") || "";
+    } catch {
+      return "";
+    }
+  });
   const [dailyTargetSeconds, setDailyTargetSeconds] = useState(() => {
     try {
       return Number(localStorage.getItem("dailyTargetSeconds")) || DEFAULT_DAILY_TARGET_SECONDS;
@@ -607,6 +622,17 @@ function Logger() {
   useEffect(() => {
     window.loggerAPI?.setMiniMode?.(isMiniMode);
   }, [isMiniMode]);
+
+  useEffect(() => {
+    applyTheme(themePreset, themeAccentColor);
+    localStorage.setItem("themePreset", themePreset);
+
+    if (themeAccentColor) {
+      localStorage.setItem("themeAccentColor", themeAccentColor);
+    } else {
+      localStorage.removeItem("themeAccentColor");
+    }
+  }, [themePreset, themeAccentColor]);
 
   useEffect(() => {
     if (!window.loggerAPI?.showNotification) return;
@@ -1620,6 +1646,8 @@ function Logger() {
   function handleSaveSettings(nextSettings) {
     setDailyTargetSeconds(nextSettings.dailyTargetSeconds);
     setTrashRetentionDays(nextSettings.trashRetentionDays);
+    setThemePreset(nextSettings.themePreset);
+    setThemeAccentColor(nextSettings.themeAccentColor);
     setShowSettingsView(false);
     setMessageTone("success");
     setMessage("Settings saved");
@@ -2911,6 +2939,9 @@ PROJ-456;2026-05-11;2t`}</pre>
             <SettingsView
               dailyTargetSeconds={dailyTargetSeconds}
               trashRetentionDays={trashRetentionDays}
+              themePreset={themePreset}
+              themeAccentColor={themeAccentColor}
+              accentColors={ACCENT_COLORS}
               onClose={() => setShowSettingsView(false)}
               onSave={handleSaveSettings}
             />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icons";
 import { DEFAULT_DAILY_TARGET_SECONDS, formatTimeShort } from "../utils/reporting";
+import { THEME_PRESETS } from "../utils/themes";
 
 function secondsToParts(seconds) {
   const safeSeconds = Math.max(0, Number(seconds) || 0);
@@ -13,6 +14,9 @@ function secondsToParts(seconds) {
 export function SettingsView({
   dailyTargetSeconds,
   trashRetentionDays,
+  themePreset,
+  themeAccentColor,
+  accentColors,
   onClose,
   onSave,
 }) {
@@ -20,13 +24,17 @@ export function SettingsView({
   const [targetHours, setTargetHours] = useState(initialTarget.hours);
   const [targetMinutes, setTargetMinutes] = useState(initialTarget.minutes);
   const [retentionDays, setRetentionDays] = useState(String(trashRetentionDays));
+  const [selectedThemePreset, setSelectedThemePreset] = useState(themePreset || "default");
+  const [selectedAccentColor, setSelectedAccentColor] = useState(themeAccentColor || "");
 
   useEffect(() => {
     const nextTarget = secondsToParts(dailyTargetSeconds);
     setTargetHours(nextTarget.hours);
     setTargetMinutes(nextTarget.minutes);
     setRetentionDays(String(trashRetentionDays));
-  }, [dailyTargetSeconds, trashRetentionDays]);
+    setSelectedThemePreset(themePreset || "default");
+    setSelectedAccentColor(themeAccentColor || "");
+  }, [dailyTargetSeconds, themeAccentColor, themePreset, trashRetentionDays]);
 
   const nextDailyTargetSeconds =
     (Number(targetHours) || 0) * 3600 + (Number(targetMinutes) || 0) * 60;
@@ -39,6 +47,8 @@ export function SettingsView({
     onSave({
       dailyTargetSeconds: nextDailyTargetSeconds,
       trashRetentionDays: Math.max(1, Math.floor(Number(retentionDays))),
+      themePreset: selectedThemePreset,
+      themeAccentColor: selectedAccentColor,
     });
   }
 
@@ -119,6 +129,63 @@ export function SettingsView({
               onChange={(event) => setRetentionDays(event.target.value)}
             />
           </label>
+        </div>
+
+        <div className="settings-card">
+          <div className="settings-card-copy">
+            <strong>Theme</strong>
+            <span>Changes colors across all views and scrollbars.</span>
+          </div>
+
+          <div className="theme-preset-grid">
+            {THEME_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className={selectedThemePreset === preset.id ? "active" : ""}
+                onClick={() => {
+                  setSelectedThemePreset(preset.id);
+                  setSelectedAccentColor("");
+                }}
+              >
+                <span
+                  className="theme-preset-swatch"
+                  style={{
+                    "--preset-bg": preset.colors.bg,
+                    "--preset-panel": preset.colors.panel,
+                    "--preset-accent": preset.colors.accent,
+                  }}
+                />
+                <span>{preset.name}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="settings-card-copy compact">
+            <strong>Accent color</strong>
+          </div>
+
+          <div className="theme-accent-grid">
+            {(accentColors || []).map((color) => (
+              <button
+                key={color}
+                type="button"
+                className={selectedAccentColor.toLowerCase() === color.toLowerCase() ? "active" : ""}
+                onClick={() => setSelectedAccentColor(color)}
+                title={color}
+                aria-label={`Use ${color} accent`}
+                style={{ "--accent-option": color }}
+              />
+            ))}
+
+            <button
+              type="button"
+              className={!selectedAccentColor ? "theme-accent-default active" : "theme-accent-default"}
+              onClick={() => setSelectedAccentColor("")}
+            >
+              Default
+            </button>
+          </div>
         </div>
 
         <div className="settings-actions">

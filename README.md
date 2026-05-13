@@ -2,6 +2,8 @@
 
 En lokal React/Electron-app for timeføring.
 
+English setup guide: [README.en.md](README.en.md)
+
 ## Dette må installeres
 
 Installer disse verktøyene før du starter:

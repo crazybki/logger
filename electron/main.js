@@ -19,6 +19,11 @@ let isQuitting = false;
 
 const NORMAL_SIZE = { width: 400, height: 700 };
 const MINI_SIZE = { width: 420, height: 305 };
+const MAX_EXPORT_ENTRIES = 20000;
+const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_IMPORT_ROWS = 5000;
+const MAX_CELL_LENGTH = 300;
+const MAX_NOTIFICATION_LENGTH = 160;
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.attensi.timelogger");
@@ -98,7 +103,38 @@ function createTray() {
 }
 
 function csvEscape(value) {
-  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const text = String(value ?? "");
+  const safeText = /^[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${safeText.replace(/"/g, '""')}"`;
+}
+
+function truncateText(value, maxLength = MAX_CELL_LENGTH) {
+  return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function normalizeExportEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+
+  const seconds = Number(entry.seconds);
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+
+  return {
+    ticketName: truncateText(entry.ticketName),
+    seconds: Math.round(seconds),
+    formatted: truncateText(entry.formatted, 80),
+    createdAt: truncateText(entry.createdAt, 80),
+  };
+}
+
+function ensureImportFileAllowed(filePath) {
+  const stat = fs.statSync(filePath);
+  if (!stat.isFile()) {
+    throw new Error("Selected path is not a file");
+  }
+
+  if (stat.size > MAX_IMPORT_FILE_BYTES) {
+    throw new Error("Import file is too large");
+  }
 }
 
 function createWindow() {
@@ -184,8 +220,8 @@ ipcMain.handle("notification:show", (_, options = {}) => {
   }
 
   const notification = new Notification({
-    title: String(options.title || "Time Logger"),
-    body: String(options.body || ""),
+    title: truncateText(options.title || "Time Logger", MAX_NOTIFICATION_LENGTH),
+    body: truncateText(options.body || "", MAX_NOTIFICATION_LENGTH),
     icon: getIconPath(),
     silent: Boolean(options.silent),
   });
@@ -197,6 +233,19 @@ ipcMain.handle("notification:show", (_, options = {}) => {
 });
 
 ipcMain.handle("log:export-entries", async (_, entries) => {
+  if (!Array.isArray(entries)) {
+    return { ok: false, error: "Invalid export data" };
+  }
+
+  const exportEntries = entries
+    .slice(0, MAX_EXPORT_ENTRIES)
+    .map(normalizeExportEntry)
+    .filter(Boolean);
+
+  if (!exportEntries.length) {
+    return { ok: false, error: "No valid entries to export" };
+  }
+
   const result = await dialog.showSaveDialog({
     title: "Save CSV file",
     defaultPath: "time-logs.csv",
@@ -209,7 +258,7 @@ ipcMain.handle("log:export-entries", async (_, entries) => {
 
   const header = "Ticket,Seconds,Formatted Time,Created At\n";
 
-  const rows = entries.map((entry) =>
+  const rows = exportEntries.map((entry) =>
     [
       csvEscape(entry.ticketName),
       csvEscape(entry.seconds),
@@ -235,7 +284,7 @@ function normalizeHeader(value) {
 function getCell(row, headers, names, fallbackIndex) {
   const index = headers.findIndex((header) => names.includes(header));
   const value = index >= 0 ? row[index] : row[fallbackIndex];
-  return String(value ?? "").trim();
+  return truncateText(value);
 }
 
 function getRawCell(row, headers, names, fallbackIndex) {
@@ -268,7 +317,7 @@ function normalizeImportDate(value) {
     }
   }
 
-  const raw = String(value ?? "").trim();
+  const raw = truncateText(value, 80);
   if (!raw) return todayDateKey();
 
   const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
@@ -290,7 +339,7 @@ function normalizeImportDate(value) {
 }
 
 function parseNumber(value) {
-  const normalized = String(value ?? "").trim().replace(",", ".");
+  const normalized = truncateText(value, 80).replace(",", ".");
   const number = Number(normalized);
   return Number.isFinite(number) ? number : 0;
 }
@@ -306,7 +355,7 @@ function parseDurationSeconds(durationValue, hoursValue, minutesValue) {
     return Math.round(durationValue * 3600);
   }
 
-  const raw = String(durationValue ?? "").trim().toLowerCase();
+  const raw = truncateText(durationValue, 80).toLowerCase();
   if (!raw) return 0;
 
   const colonMatch = raw.match(/^(\d+)(?::(\d{1,2}))(?::(\d{1,2}))?$/);
@@ -332,7 +381,9 @@ function parseDurationSeconds(durationValue, hoursValue, minutesValue) {
 function parseTicketRows(rows) {
   if (!rows.length) return [];
 
-  const firstRow = rows[0].map(normalizeHeader);
+  const limitedRows = rows.slice(0, MAX_IMPORT_ROWS);
+
+  const firstRow = limitedRows[0].map(normalizeHeader);
   const hasHeader = firstRow.some((header) =>
     [
       "ticket",
@@ -352,7 +403,7 @@ function parseTicketRows(rows) {
     ].includes(header)
   );
   const headers = hasHeader ? firstRow : [];
-  const dataRows = hasHeader ? rows.slice(1) : rows;
+  const dataRows = hasHeader ? limitedRows.slice(1) : limitedRows;
 
   const tickets = [];
   const entries = [];
@@ -361,13 +412,13 @@ function parseTicketRows(rows) {
     .map((row) => {
       const id = hasHeader
         ? getCell(row, headers, ["ticket", "ticket id", "id", "key"], 0)
-        : String(row[0] ?? "").trim();
+        : truncateText(row[0]);
       const title = hasHeader
         ? getCell(row, headers, ["title", "summary", "description"], 1)
-        : String(row[1] ?? "").trim();
+        : truncateText(row[1]);
       const favoriteValue = hasHeader
         ? getCell(row, headers, ["favorite", "favourite", "star"], 2)
-        : String(row[2] ?? "").trim();
+        : truncateText(row[2], 80);
       const dateValue = hasHeader
         ? getRawCell(row, headers, ["date", "day", "created", "created at"], 3)
         : row[3];
@@ -413,9 +464,12 @@ function parseTicketRows(rows) {
 }
 
 function parseTextTickets(filePath) {
+  ensureImportFileAllowed(filePath);
+
   const content = fs.readFileSync(filePath, "utf8");
   const rows = content
     .split(/\r?\n/)
+    .slice(0, MAX_IMPORT_ROWS)
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
@@ -445,6 +499,7 @@ ipcMain.handle("tickets:import-file", async () => {
   try {
     const filePath = result.filePaths[0];
     const extension = path.extname(filePath).toLowerCase();
+    ensureImportFileAllowed(filePath);
 
     if (extension === ".txt") {
       return { ok: true, ...parseTextTickets(filePath), filePath };
@@ -452,7 +507,7 @@ ipcMain.handle("tickets:import-file", async () => {
 
     const workbook = XLSX.readFile(filePath);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }).slice(0, MAX_IMPORT_ROWS);
 
     if (!rows.length) {
       return { ok: true, tickets: [], entries: [], filePath };

@@ -1025,6 +1025,20 @@ function Logger() {
     startEntry(miniTicket);
   }
 
+  function notifyDailyTargetReached(loggedSeconds, dateKey = todayDateKey) {
+    if (!window.loggerAPI?.showNotification) return;
+    if (loggedSeconds < dailyTargetSeconds) return;
+
+    const notificationKey = `${dateKey}:${dailyTargetSeconds}`;
+    if (dailyTargetNotificationRef.current === notificationKey) return;
+
+    dailyTargetNotificationRef.current = notificationKey;
+    window.loggerAPI.showNotification({
+      title: "Daily target reached",
+      body: `Logged ${formatTimeShort(loggedSeconds)} today.`,
+    });
+  }
+
   function handleToggleMiniTimer() {
     if (activeEntryId != null) {
       handlePauseCurrent();
@@ -1631,6 +1645,10 @@ function Logger() {
       return;
     }
 
+    const crossesDailyTarget =
+      manualDate === todayDateKey &&
+      todayLoggedSeconds < dailyTargetSeconds &&
+      todayLoggedSeconds + totalSeconds >= dailyTargetSeconds;
     const timestamp = Date.now();
     const newEntry = {
       id: timestamp,
@@ -1663,6 +1681,10 @@ function Logger() {
     setShowManualModal(false);
     setMessageTone("success");
     setMessage(manualEntryType === "task" ? "Manual task saved" : "Manual entry saved");
+
+    if (crossesDailyTarget) {
+      notifyDailyTargetReached(todayLoggedSeconds + totalSeconds);
+    }
   }
 
   async function handleExportCSV() {

@@ -287,6 +287,39 @@ export const Icon = ({ name, size = 13, color }) => {
                 <path d="M8 11.8h.01" />
             </svg>
         ),
+        settings: (
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            >
+                <circle cx="8" cy="8" r="2.2" />
+                <path d="M8 2.2v1.4M8 12.4v1.4M3.9 3.9l1 1M11.1 11.1l1 1M2.2 8h1.4M12.4 8h1.4M3.9 12.1l1-1M11.1 4.9l1-1" />
+            </svg>
+        ),
+        report: (
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            >
+                <path d="M3 13V3" />
+                <path d="M3 13h10" />
+                <path d="M5.5 10V7" />
+                <path d="M8 10V4.8" />
+                <path d="M10.5 10V6" />
+            </svg>
+        ),
         search: (
             <svg
                 width={size}

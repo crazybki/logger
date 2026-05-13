@@ -4,9 +4,20 @@ import WindowTitleBar from "../main logger/WindowTitleBar";
 import { PillMenu } from "../components/PillMenu";
 import { Btn } from "../components/Buttons";
 import { Icon } from "../components/Icons";
+import { ReportsView } from "../components/ReportsView";
+import { SettingsView } from "../components/SettingsView";
+import {
+  DEFAULT_DAILY_TARGET_SECONDS,
+  formatMissingDayLabel,
+  formatMissingDelta,
+  getCurrentWeekdayKeys,
+  getDateParts,
+  getDateKey,
+  getDateKeyFromDate,
+  getWeekdayLabel,
+} from "../utils/reporting";
 
 function Logger() {
-  const DAILY_TARGET_SECONDS = 27000;
   const [search, setSearch] = useState("");
   const [selectedTicket, setSelectedTicket] = useState("");
   const [message, setMessage] = useState("");
@@ -16,9 +27,18 @@ function Logger() {
   const [isMiniMode, setIsMiniMode] = useState(false);
   const [showTrashView, setShowTrashView] = useState(false);
   const [showMissingTimeView, setShowMissingTimeView] = useState(false);
+  const [showReportsView, setShowReportsView] = useState(false);
+  const [showSettingsView, setShowSettingsView] = useState(false);
   const [missingTimeFilter, setMissingTimeFilter] = useState("missing");
   const [trashTab, setTrashTab] = useState("tickets");
   const [trashSearch, setTrashSearch] = useState("");
+  const [dailyTargetSeconds, setDailyTargetSeconds] = useState(() => {
+    try {
+      return Number(localStorage.getItem("dailyTargetSeconds")) || DEFAULT_DAILY_TARGET_SECONDS;
+    } catch {
+      return DEFAULT_DAILY_TARGET_SECONDS;
+    }
+  });
   const [trashRetentionDays, setTrashRetentionDays] = useState(() => {
     try {
       return Number(localStorage.getItem("trashRetentionDays")) || 7;
@@ -143,112 +163,6 @@ function Logger() {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   }
 
-  function getDateParts(value) {
-    const raw = String(value ?? "").split(",")[0].trim();
-
-    const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (isoMatch) {
-      return {
-        year: isoMatch[1],
-        month: isoMatch[2].padStart(2, "0"),
-        day: isoMatch[3].padStart(2, "0"),
-      };
-    }
-
-    const dottedMatch = raw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-    if (dottedMatch) {
-      return {
-        year: dottedMatch[3],
-        month: dottedMatch[2].padStart(2, "0"),
-        day: dottedMatch[1].padStart(2, "0"),
-      };
-    }
-
-    const slashMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (slashMatch) {
-      const first = Number(slashMatch[1]);
-      const second = Number(slashMatch[2]);
-      const isMonthFirst = first <= 12 && second > 12;
-      const month = isMonthFirst ? slashMatch[1] : slashMatch[2];
-      const day = isMonthFirst ? slashMatch[2] : slashMatch[1];
-
-      return {
-        year: slashMatch[3],
-        month: month.padStart(2, "0"),
-        day: day.padStart(2, "0"),
-      };
-    }
-
-    const date = new Date(raw);
-    if (!Number.isNaN(date.getTime())) {
-      return {
-        year: String(date.getFullYear()),
-        month: String(date.getMonth() + 1).padStart(2, "0"),
-        day: String(date.getDate()).padStart(2, "0"),
-      };
-    }
-
-    return null;
-  }
-
-  function getDateKey(entry) {
-    if (entry?.dateKey) return entry.dateKey;
-    const parts = getDateParts(entry.createdAt);
-    if (!parts) return String(entry.createdAt ?? "");
-    return `${parts.year}-${parts.month}-${parts.day}`;
-  }
-
-  function getDateKeyFromDate(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  function getWeekdayLabel(dateKey) {
-    const date = new Date(`${dateKey}T12:00:00`);
-    if (Number.isNaN(date.getTime())) return "";
-
-    return date.toLocaleDateString("en-US", { weekday: "short" });
-  }
-
-  function formatMissingDayLabel(dateKey) {
-    const date = new Date(`${dateKey}T12:00:00`);
-    if (Number.isNaN(date.getTime())) return dateKey;
-
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
-  }
-
-  function getCurrentWeekdayKeys() {
-    const today = new Date();
-    today.setHours(12, 0, 0, 0);
-
-    const monday = new Date(today);
-    const dayIndex = (today.getDay() + 6) % 7;
-    monday.setDate(today.getDate() - dayIndex);
-
-    const keys = [];
-    for (let index = 0; index < 5; index += 1) {
-      const date = new Date(monday);
-      date.setDate(monday.getDate() + index);
-      if (date > today) break;
-      keys.push(getDateKeyFromDate(date));
-    }
-
-    return keys;
-  }
-
-  function formatMissingDelta(seconds) {
-    const sign = seconds < 0 ? "-" : "";
-    const absoluteSeconds = Math.abs(seconds);
-    const hours = Math.floor(absoluteSeconds / 3600);
-    const minutes = Math.floor((absoluteSeconds % 3600) / 60);
-    return `${sign}${hours}:${String(minutes).padStart(2, "0")}`;
-  }
-
   function getDaysUntilPermanentDelete(deletedAt) {
     const deletedTime = new Date(deletedAt).getTime();
     if (Number.isNaN(deletedTime)) return trashRetentionDays;
@@ -333,7 +247,7 @@ function Logger() {
         ? countdownResetOffset
         : 0;
     const countedSeconds = Math.max(0, totalSeconds - resetOffset);
-    return Math.max(0, DAILY_TARGET_SECONDS - countedSeconds);
+    return Math.max(0, dailyTargetSeconds - countedSeconds);
   }, [activeEntries, countdownResetDate, countdownResetOffset, nowTick, todayDateKey]);
 
   const todayEntries = useMemo(() => {
@@ -376,7 +290,7 @@ function Logger() {
 
     return getCurrentWeekdayKeys().map((dateKey) => {
       const loggedSeconds = totalsByDate[dateKey] || 0;
-      const deltaSeconds = loggedSeconds - DAILY_TARGET_SECONDS;
+      const deltaSeconds = loggedSeconds - dailyTargetSeconds;
       let status = "done";
 
       if (loggedSeconds === 0) {
@@ -391,9 +305,9 @@ function Logger() {
         dateKey,
         loggedSeconds,
         deltaSeconds,
-        missingSeconds: Math.max(0, DAILY_TARGET_SECONDS - loggedSeconds),
+        missingSeconds: Math.max(0, dailyTargetSeconds - loggedSeconds),
         status,
-        percent: Math.min(100, Math.round((loggedSeconds / DAILY_TARGET_SECONDS) * 100)),
+        percent: Math.min(100, Math.round((loggedSeconds / dailyTargetSeconds) * 100)),
       };
     }).sort((a, b) => b.dateKey.localeCompare(a.dateKey));
   }, [activeEntries, nowTick]);
@@ -411,7 +325,7 @@ function Logger() {
     return missingTimeDays.reduce((sum, day) => sum + day.loggedSeconds, 0);
   }, [missingTimeDays]);
 
-  const totalWeekTargetSeconds = missingTimeDays.length * DAILY_TARGET_SECONDS;
+  const totalWeekTargetSeconds = missingTimeDays.length * dailyTargetSeconds;
   const mergeSourceEntry = useMemo(() => {
     return activeEntries.find((entry) => entry.id === mergeSourceEntryId) || null;
   }, [activeEntries, mergeSourceEntryId]);
@@ -510,6 +424,10 @@ function Logger() {
   useEffect(() => {
     localStorage.setItem("trashRetentionDays", String(trashRetentionDays));
   }, [trashRetentionDays]);
+
+  useEffect(() => {
+    localStorage.setItem("dailyTargetSeconds", String(dailyTargetSeconds));
+  }, [dailyTargetSeconds]);
 
   useEffect(() => {
     localStorage.setItem("countdownResetOffset", JSON.stringify(countdownResetOffset));
@@ -1401,6 +1319,8 @@ function Logger() {
   function openTrashView() {
     setShowTrashView(true);
     setShowMissingTimeView(false);
+    setShowReportsView(false);
+    setShowSettingsView(false);
     setIsMiniMode(false);
     setShowManualModal(false);
     setShowTodoPanel(false);
@@ -1410,6 +1330,28 @@ function Logger() {
   function openMissingTimeView() {
     setShowMissingTimeView(true);
     setShowTrashView(false);
+    setShowReportsView(false);
+    setShowSettingsView(false);
+    setIsMiniMode(false);
+    setShowManualModal(false);
+    setShowTodoPanel(false);
+  }
+
+  function openReportsView() {
+    setShowReportsView(true);
+    setShowTrashView(false);
+    setShowMissingTimeView(false);
+    setShowSettingsView(false);
+    setIsMiniMode(false);
+    setShowManualModal(false);
+    setShowTodoPanel(false);
+  }
+
+  function openSettingsView() {
+    setShowSettingsView(true);
+    setShowTrashView(false);
+    setShowMissingTimeView(false);
+    setShowReportsView(false);
     setIsMiniMode(false);
     setShowManualModal(false);
     setShowTodoPanel(false);
@@ -1604,6 +1546,8 @@ function Logger() {
   function openManual(prefill = "", entryType = "ticket") {
     setShowTrashView(false);
     setShowMissingTimeView(false);
+    setShowReportsView(false);
+    setShowSettingsView(false);
     setManualTicket(prefill);
     setManualEntryType(entryType);
     setManualDate(getTodayDate());
@@ -1611,6 +1555,14 @@ function Logger() {
     setManualMinutes("");
     setManualFocused(null);
     setShowManualModal(true);
+  }
+
+  function handleSaveSettings(nextSettings) {
+    setDailyTargetSeconds(nextSettings.dailyTargetSeconds);
+    setTrashRetentionDays(nextSettings.trashRetentionDays);
+    setShowSettingsView(false);
+    setMessageTone("success");
+    setMessage("Settings saved");
   }
 
   function handleSaveManualEntry() {
@@ -1811,7 +1763,7 @@ function Logger() {
   const canSaveManual = Boolean(manualTicket.trim() && (manualHours || manualMinutes));
   const miniHasTicket = miniTicket.trim() !== "";
   const miniIsRunning = activeEntryId != null;
-  const remainingPercent = Math.max(0, Math.min(100, (countdownSeconds / DAILY_TARGET_SECONDS) * 100));
+  const remainingPercent = Math.max(0, Math.min(100, (countdownSeconds / dailyTargetSeconds) * 100));
   const importGuide = showImportGuide && (
     <div className="import-guide-backdrop" onClick={() => setShowImportGuide(false)}>
       <div className="import-guide" onClick={(event) => event.stopPropagation()}>
@@ -2018,7 +1970,7 @@ PROJ-456;2026-05-11;2t`}</pre>
         <span>Total owed</span>
         <strong>{formatMissingDelta(totalMissingSeconds)}</strong>
         <p>
-          Across {missingTimeDays.filter((day) => day.missingSeconds > 0).length} days · Target 7h 30m / day
+          Across {missingTimeDays.filter((day) => day.missingSeconds > 0).length} days · Target {formatTimeShort(dailyTargetSeconds)} / day
         </p>
       </div>
 
@@ -2101,7 +2053,7 @@ PROJ-456;2026-05-11;2t`}</pre>
 
               <div className="missing-day-side">
                 <strong>{formatMissingDelta(day.deltaSeconds)}</strong>
-                <span>of 7:30</span>
+                <span>of {formatMissingDelta(dailyTargetSeconds)}</span>
               </div>
             </div>
           ))
@@ -2109,7 +2061,7 @@ PROJ-456;2026-05-11;2t`}</pre>
       </div>
 
       <div className="missing-footer">
-        <span>Goal: <strong>7h 30m</strong> / day</span>
+        <span>Goal: <strong>{formatTimeShort(dailyTargetSeconds)}</strong> / day</span>
         <button type="button" onClick={() => openManual("", "ticket")}>
           <Icon name="play" size={12} />
           <span>Make up time</span>
@@ -2626,6 +2578,8 @@ PROJ-456;2026-05-11;2t`}</pre>
                 onTrash={handleClearAll}
                 onResetCountdown={handleResetCountdown}
                 onMissingTime={openMissingTimeView}
+                onReports={openReportsView}
+                onSettings={openSettingsView}
                 size="normal"
               />
             </div>
@@ -2746,6 +2700,8 @@ PROJ-456;2026-05-11;2t`}</pre>
               onTrash={handleClearAll}
               onResetCountdown={handleResetCountdown}
               onMissingTime={openMissingTimeView}
+              onReports={openReportsView}
+              onSettings={openSettingsView}
               size="normal"
             />
             <div style={{ width: '1px', height: '14px', background: 'rgba(255,255,255,0.12)', margin: '0 2px' }} />
@@ -2877,6 +2833,21 @@ PROJ-456;2026-05-11;2t`}</pre>
             trashView
           ) : showMissingTimeView ? (
             missingTimeView
+          ) : showReportsView ? (
+            <ReportsView
+              entries={activeEntries}
+              nowTick={nowTick}
+              dailyTargetSeconds={dailyTargetSeconds}
+              onClose={() => setShowReportsView(false)}
+              onAddManualTime={() => openManual("", "ticket")}
+            />
+          ) : showSettingsView ? (
+            <SettingsView
+              dailyTargetSeconds={dailyTargetSeconds}
+              trashRetentionDays={trashRetentionDays}
+              onClose={() => setShowSettingsView(false)}
+              onSave={handleSaveSettings}
+            />
           ) : (
             <div className="home-view">
           {mergeSourceEntry && (
@@ -2902,7 +2873,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                     {formatTime(countdownSeconds)}
                   </div>
                   <div className="countdown-subtext">
-                    of {formatTime(DAILY_TARGET_SECONDS)}
+                    of {formatTime(dailyTargetSeconds)}
                   </div>
                 </div>
 

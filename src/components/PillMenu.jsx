@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icons';
 
-export const PillMenu = ({ onManual, onMiniMode, onExport, onImportTickets, onClearLogs, onTrash, onResetCountdown, onMissingTime, size = 'normal' }) => {
+export const PillMenu = ({ onManual, onMiniMode, onExport, onImportTickets, onClearLogs, onTrash, onResetCountdown, onMissingTime, onReports, onSettings, size = 'normal' }) => {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
     const iconSize = size === 'small' ? 12 : 14;
@@ -21,6 +21,8 @@ export const PillMenu = ({ onManual, onMiniMode, onExport, onImportTickets, onCl
             items: [
                 { icon: 'arrowOut', title: 'Mini Mode', color: '#8b5cff', action: onMiniMode },
                 { icon: 'missingTime', title: 'Missing time', shortcut: 'Alt+M', color: '#ff7676', action: onMissingTime },
+                { icon: 'report', title: 'Reports', color: '#43b583', action: onReports },
+                { icon: 'settings', title: 'Settings', color: '#a8b0c8', action: onSettings },
             ],
         },
         {

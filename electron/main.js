@@ -3,6 +3,7 @@ const {
   BrowserWindow,
   Menu,
   Notification,
+  safeStorage,
   Tray,
   ipcMain,
   globalShortcut,
@@ -24,6 +25,14 @@ const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_IMPORT_ROWS = 5000;
 const MAX_CELL_LENGTH = 300;
 const MAX_NOTIFICATION_LENGTH = 160;
+const SECURE_STORE_KEYS = new Set([
+  "timeEntries",
+  "jiraTickets",
+  "todoTasks",
+  "activeEntryId",
+  "countdownResetOffset",
+  "countdownResetDate",
+]);
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.attensi.timelogger");
@@ -137,6 +146,47 @@ function ensureImportFileAllowed(filePath) {
   }
 }
 
+function getSecureStorePath() {
+  return path.join(app.getPath("userData"), "secure-store.json");
+}
+
+async function readSecureStore() {
+  try {
+    const content = await fs.promises.readFile(getSecureStorePath(), "utf8");
+    return JSON.parse(content);
+  } catch (error) {
+    if (error.code === "ENOENT") return {};
+    throw error;
+  }
+}
+
+async function writeSecureStore(store) {
+  await fs.promises.mkdir(path.dirname(getSecureStorePath()), { recursive: true });
+  await fs.promises.writeFile(getSecureStorePath(), JSON.stringify(store, null, 2), "utf8");
+}
+
+function assertSecureStoreAvailable() {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("OS encryption is not available");
+  }
+}
+
+function assertSecureStoreKey(key) {
+  if (!SECURE_STORE_KEYS.has(key)) {
+    throw new Error("Secure store key is not allowed");
+  }
+}
+
+function encryptValue(value) {
+  assertSecureStoreAvailable();
+  return safeStorage.encryptString(JSON.stringify(value)).toString("base64");
+}
+
+function decryptValue(encryptedValue) {
+  assertSecureStoreAvailable();
+  return JSON.parse(safeStorage.decryptString(Buffer.from(encryptedValue, "base64")));
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: NORMAL_SIZE.width,
@@ -230,6 +280,52 @@ ipcMain.handle("notification:show", (_, options = {}) => {
   notification.show();
 
   return { ok: true };
+});
+
+ipcMain.handle("secure-store:get-all", async (_, keys = []) => {
+  try {
+    assertSecureStoreAvailable();
+
+    const requestedKeys = Array.isArray(keys) ? keys : [];
+    requestedKeys.forEach(assertSecureStoreKey);
+
+    const store = await readSecureStore();
+    const values = {};
+
+    requestedKeys.forEach((key) => {
+      if (store[key]) {
+        values[key] = decryptValue(store[key]);
+      }
+    });
+
+    return { ok: true, values };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("secure-store:set", async (_, key, value) => {
+  try {
+    assertSecureStoreKey(key);
+    const store = await readSecureStore();
+    store[key] = encryptValue(value);
+    await writeSecureStore(store);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("secure-store:delete", async (_, key) => {
+  try {
+    assertSecureStoreKey(key);
+    const store = await readSecureStore();
+    delete store[key];
+    await writeSecureStore(store);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
 });
 
 ipcMain.handle("log:export-entries", async (_, entries) => {

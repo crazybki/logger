@@ -18,6 +18,15 @@ import {
 } from "../utils/reporting";
 import { ACCENT_COLORS, applyTheme } from "../utils/themes";
 
+const SECURE_STORE_KEYS = [
+  "timeEntries",
+  "jiraTickets",
+  "todoTasks",
+  "activeEntryId",
+  "countdownResetOffset",
+  "countdownResetDate",
+];
+
 function Logger() {
   const [search, setSearch] = useState("");
   const [selectedTicket, setSelectedTicket] = useState("");
@@ -33,6 +42,9 @@ function Logger() {
   const [missingTimeFilter, setMissingTimeFilter] = useState("missing");
   const [trashTab, setTrashTab] = useState("tickets");
   const [trashSearch, setTrashSearch] = useState("");
+  const [secureStoreReady, setSecureStoreReady] = useState(() => {
+    return !window.loggerAPI?.secureStoreGetAll;
+  });
   const [themePreset, setThemePreset] = useState(() => {
     try {
       return localStorage.getItem("themePreset") || "default";
@@ -430,13 +442,97 @@ function Logger() {
     );
   }, [deletedTodoTasks, trashSearch]);
 
-  useEffect(() => {
-    localStorage.setItem("jiraTickets", JSON.stringify(jiraTickets));
-  }, [jiraTickets]);
+  function persistSecureValue(key, value) {
+    if (window.loggerAPI?.secureStoreSet) {
+      window.loggerAPI.secureStoreSet(key, value).then((result) => {
+        if (!result?.ok) {
+          localStorage.setItem(key, JSON.stringify(value));
+        }
+      });
+      return;
+    }
+
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+
+  function removeSecureValue(key) {
+    if (window.loggerAPI?.secureStoreDelete) {
+      window.loggerAPI.secureStoreDelete(key).then((result) => {
+        if (!result?.ok) localStorage.removeItem(key);
+      });
+      return;
+    }
+
+    localStorage.removeItem(key);
+  }
 
   useEffect(() => {
-    localStorage.setItem("todoTasks", JSON.stringify(todoTasks));
-  }, [todoTasks]);
+    let cancelled = false;
+
+    async function loadSecureStore() {
+      if (!window.loggerAPI?.secureStoreGetAll) {
+        setSecureStoreReady(true);
+        return;
+      }
+
+      const result = await window.loggerAPI.secureStoreGetAll(SECURE_STORE_KEYS);
+      if (cancelled) return;
+
+      if (!result?.ok) {
+        setMessage("Secure storage unavailable; using browser storage");
+        setSecureStoreReady(true);
+        return;
+      }
+
+      const values = result.values || {};
+
+      if (Array.isArray(values.timeEntries)) setEntries(values.timeEntries);
+      if (Array.isArray(values.jiraTickets)) setJiraTickets(values.jiraTickets);
+      if (Array.isArray(values.todoTasks)) setTodoTasks(values.todoTasks);
+      if (Object.prototype.hasOwnProperty.call(values, "activeEntryId")) {
+        setActiveEntryId(values.activeEntryId);
+      }
+      if (typeof values.countdownResetOffset === "number") {
+        setCountdownResetOffset(values.countdownResetOffset);
+      }
+      if (typeof values.countdownResetDate === "string") {
+        setCountdownResetDate(values.countdownResetDate);
+      }
+
+      const hasSecureData = Object.keys(values).length > 0;
+      if (!hasSecureData) {
+        await Promise.all(SECURE_STORE_KEYS.map(async (key) => {
+          const rawValue = localStorage.getItem(key);
+          if (rawValue == null) return;
+
+          try {
+            await window.loggerAPI.secureStoreSet(key, JSON.parse(rawValue));
+          } catch {
+            // Ignore malformed legacy values.
+          }
+        }));
+      }
+
+      SECURE_STORE_KEYS.forEach((key) => localStorage.removeItem(key));
+      setSecureStoreReady(true);
+    }
+
+    loadSecureStore();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!secureStoreReady) return;
+    persistSecureValue("jiraTickets", jiraTickets);
+  }, [jiraTickets, secureStoreReady]);
+
+  useEffect(() => {
+    if (!secureStoreReady) return;
+    persistSecureValue("todoTasks", todoTasks);
+  }, [secureStoreReady, todoTasks]);
 
   useEffect(() => {
     localStorage.setItem("trashRetentionDays", String(trashRetentionDays));
@@ -447,24 +543,29 @@ function Logger() {
   }, [dailyTargetSeconds]);
 
   useEffect(() => {
-    localStorage.setItem("countdownResetOffset", JSON.stringify(countdownResetOffset));
-  }, [countdownResetOffset]);
+    if (!secureStoreReady) return;
+    persistSecureValue("countdownResetOffset", countdownResetOffset);
+  }, [countdownResetOffset, secureStoreReady]);
 
   useEffect(() => {
+    if (!secureStoreReady) return;
+
     if (countdownResetDate) {
-      localStorage.setItem("countdownResetDate", countdownResetDate);
+      persistSecureValue("countdownResetDate", countdownResetDate);
     } else {
-      localStorage.removeItem("countdownResetDate");
+      removeSecureValue("countdownResetDate");
     }
-  }, [countdownResetDate]);
+  }, [countdownResetDate, secureStoreReady]);
 
   useEffect(() => {
+    if (!secureStoreReady) return;
+
     if (activeEntryId == null) {
-      localStorage.removeItem("activeEntryId");
+      removeSecureValue("activeEntryId");
     } else {
-      localStorage.setItem("activeEntryId", JSON.stringify(activeEntryId));
+      persistSecureValue("activeEntryId", activeEntryId);
     }
-  }, [activeEntryId]);
+  }, [activeEntryId, secureStoreReady]);
 
   useEffect(() => {
     if (storageWarningDismissedUntil) {
@@ -509,18 +610,19 @@ function Logger() {
   }, [nowTick, trashRetentionDays]);
 
   useEffect(() => {
-    localStorage.setItem("timeEntries", JSON.stringify(entries));
-  }, [entries]);
+    if (!secureStoreReady) return;
+    persistSecureValue("timeEntries", entries);
+  }, [entries, secureStoreReady]);
 
   useEffect(() => {
     try {
       let totalSize = 0;
 
-      const timeEntriesStr = localStorage.getItem("timeEntries");
-      const jiraTicketsStr = localStorage.getItem("jiraTickets");
-      const todoTasksStr = localStorage.getItem("todoTasks");
-      const countdownResetOffsetStr = localStorage.getItem("countdownResetOffset");
-      const countdownResetDateStr = localStorage.getItem("countdownResetDate");
+      const timeEntriesStr = JSON.stringify(entries);
+      const jiraTicketsStr = JSON.stringify(jiraTickets);
+      const todoTasksStr = JSON.stringify(todoTasks);
+      const countdownResetOffsetStr = JSON.stringify(countdownResetOffset);
+      const countdownResetDateStr = countdownResetDate;
 
       if (timeEntriesStr) {
         totalSize += timeEntriesStr.length;
@@ -988,7 +1090,6 @@ function Logger() {
           : entry
         );
 
-        localStorage.setItem("timeEntries", JSON.stringify(next));
         return next;
       }
     );

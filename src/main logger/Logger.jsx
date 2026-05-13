@@ -2687,9 +2687,7 @@ PROJ-456;2026-05-11;2t`}</pre>
     }}>
       <WindowTitleBar />
       <div className="container">
-        <div className="header">
-          <span className="app-label">Time Logger</span>
-
+        <div className="header app-header">
           <div className="header-actions">
             <PillMenu
               onManual={() => openManual(selectedTicket || "")}

@@ -11,12 +11,36 @@
 @keyframes view-enter {
     from {
         opacity: 0;
-        transform: translateY(8px) scale(0.992);
+        transform: translateY(10px) scale(0.992);
     }
 
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes card-enter {
+    from {
+        opacity: 0;
+        transform: translateY(9px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes list-item-enter {
+    from {
+        opacity: 0;
+        transform: translateY(7px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
@@ -3817,6 +3841,11 @@ html {
 
 /* Reference image theme */
 :root {
+    --motion-fast: 120ms;
+    --motion-base: 180ms;
+    --motion-slow: 260ms;
+    --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
     --theme-bg: #070a12;
     --theme-surface: #0b0f18;
     --theme-panel: #111522;
@@ -5117,4 +5146,222 @@ body {
 .mini-container:not(.mini-container-manual) .mini-actions {
     grid-template-columns: 1fr 1fr;
     padding-bottom: 48px;
+}
+
+/* MOTION POLISH */
+.home-view,
+.settings-view,
+.reports-view,
+.trash-view,
+.missing-time-view,
+.todo-panel,
+.import-guide,
+.manual-entry-top,
+.shortcuts-panel {
+    animation: view-enter var(--motion-slow) var(--motion-ease-out) both;
+}
+
+.remaining-card,
+.active-ticket-card,
+.ticket-controls,
+.tasks-card,
+.settings-card,
+.reports-progress-card,
+.reports-summary-grid div,
+.missing-week-card,
+.mini-timer-card {
+    animation: card-enter var(--motion-slow) var(--motion-ease-out) both;
+}
+
+.active-ticket-card {
+    animation-delay: 35ms;
+}
+
+.ticket-controls,
+.reports-summary-grid div:nth-child(2) {
+    animation-delay: 70ms;
+}
+
+.tasks-card,
+.reports-summary-grid div:nth-child(3) {
+    animation-delay: 105ms;
+}
+
+.todo-item,
+.entry-item,
+.search-item,
+.trash-item,
+.missing-day,
+.reports-ticket-row {
+    animation: list-item-enter var(--motion-base) var(--motion-ease-out) both;
+}
+
+.todo-item:nth-child(2),
+.entry-item:nth-child(2),
+.search-item:nth-child(2),
+.trash-item:nth-child(2),
+.missing-day:nth-child(2),
+.reports-ticket-row:nth-child(2) {
+    animation-delay: 25ms;
+}
+
+.todo-item:nth-child(3),
+.entry-item:nth-child(3),
+.search-item:nth-child(3),
+.trash-item:nth-child(3),
+.missing-day:nth-child(3),
+.reports-ticket-row:nth-child(3) {
+    animation-delay: 50ms;
+}
+
+.todo-item:nth-child(n + 4),
+.entry-item:nth-child(n + 4),
+.search-item:nth-child(n + 4),
+.trash-item:nth-child(n + 4),
+.missing-day:nth-child(n + 4),
+.reports-ticket-row:nth-child(n + 4) {
+    animation-delay: 75ms;
+}
+
+button,
+.main-btn,
+.action-btn,
+.mini-btn,
+.mini-primary-start,
+.mini-action-btn,
+.entry-action-btn,
+.todo-new-btn,
+.todo-back-btn,
+.todo-close-btn,
+.todo-reminder-actions button,
+.todo-snooze-grid button,
+.modal-close,
+.settings-card-footer button,
+.settings-cancel,
+.settings-save,
+.trash-item button,
+.missing-footer button,
+.theme-preset-grid button,
+.theme-accent-grid button,
+.manual-type-toggle button,
+.favorite-chip-star,
+.search-item .fav-btn {
+    transition:
+        background-color var(--motion-base) var(--motion-ease),
+        border-color var(--motion-base) var(--motion-ease),
+        box-shadow var(--motion-base) var(--motion-ease),
+        color var(--motion-base) var(--motion-ease),
+        opacity var(--motion-fast) ease,
+        transform var(--motion-base) var(--motion-ease);
+}
+
+input,
+textarea,
+select,
+.mini-ticket-input,
+.search-row input,
+.modal-body input,
+.todo-form input,
+.todo-form textarea,
+.todo-form select,
+.settings-time-grid input,
+.settings-single-input input {
+    transition:
+        background-color var(--motion-base) var(--motion-ease),
+        border-color var(--motion-base) var(--motion-ease),
+        box-shadow var(--motion-base) var(--motion-ease),
+        color var(--motion-base) var(--motion-ease);
+}
+
+.main-btn:hover:not(:disabled),
+.action-btn:hover:not(:disabled),
+.mini-btn:hover:not(:disabled),
+.mini-primary-start:hover:not(:disabled),
+.mini-action-btn:hover:not(:disabled),
+.settings-save:hover:not(:disabled),
+.todo-add-btn:hover,
+.import-guide-primary:hover,
+.missing-footer button:hover,
+.trash-empty-btn:hover,
+.todo-empty-state button:hover {
+    transform: translateY(-1px);
+}
+
+.main-btn:active:not(:disabled),
+.action-btn:active:not(:disabled),
+.mini-btn:active:not(:disabled),
+.mini-primary-start:active:not(:disabled),
+.mini-action-btn:active:not(:disabled),
+.settings-save:active:not(:disabled),
+.todo-add-btn:active,
+.import-guide-primary:active,
+.missing-footer button:active,
+.trash-empty-btn:active,
+.todo-empty-state button:active {
+    transform: translateY(0) scale(0.99);
+}
+
+.remaining-card,
+.active-ticket-card,
+.tasks-card,
+.settings-card,
+.reports-progress-card,
+.reports-summary-grid div,
+.missing-week-card,
+.missing-day,
+.trash-item,
+.todo-item,
+.entry-item,
+.search-item button:first-child {
+    transition:
+        background-color var(--motion-base) var(--motion-ease),
+        border-color var(--motion-base) var(--motion-ease),
+        box-shadow var(--motion-base) var(--motion-ease),
+        opacity var(--motion-base) var(--motion-ease),
+        transform var(--motion-base) var(--motion-ease);
+}
+
+.active-ticket-card:hover,
+.tasks-card:hover,
+.settings-card:hover,
+.reports-progress-card:hover,
+.reports-summary-grid div:hover,
+.missing-day:hover,
+.trash-item:hover,
+.todo-item:hover,
+.entry-item:hover:not(.deleting):not(.merge-source-removing) {
+    transform: translateY(-1px);
+}
+
+.search-results,
+.todo-snooze-menu,
+.ticket-context-menu {
+    animation: context-menu-enter var(--motion-base) var(--motion-ease-out) both;
+}
+
+.message-toast,
+.todo-reminder {
+    animation: toast-enter var(--motion-slow) var(--motion-ease-out) both;
+}
+
+.remaining-ring,
+.missing-progress-fill,
+.missing-day-fill,
+.reports-ticket-track div,
+.mini-progress-fill {
+    transition:
+        background-color var(--motion-base) var(--motion-ease),
+        box-shadow var(--motion-base) var(--motion-ease),
+        width var(--motion-slow) var(--motion-ease-out),
+        transform var(--motion-slow) var(--motion-ease-out);
+}
+
+.theme-preset-grid button:hover,
+.theme-accent-grid button:hover {
+    transform: translateY(-1px);
+}
+
+.theme-preset-grid button:active,
+.theme-accent-grid button:active {
+    transform: translateY(0) scale(0.98);
 }

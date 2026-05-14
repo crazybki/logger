@@ -319,17 +319,28 @@ body {
 }
 
 .favorite-top-btn {
-    background: none;
-    border: none;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
     color: #f5a623;
     cursor: pointer;
+    display: flex;
     font-size: 14px;
-    padding: 2px 4px;
+    height: 26px;
+    justify-content: center;
+    padding: 0;
     transition: all 0.13s;
+    width: 26px;
 }
 
 .favorite-top-btn:hover {
     transform: scale(1.15);
+}
+
+.favorite-top-btn.active {
+    background: rgba(245, 166, 35, 0.14);
+    border-color: rgba(245, 166, 35, 0.3);
 }
 
 .todo-top-btn {
@@ -2077,49 +2088,82 @@ body {
 }
 
 .favorites-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 12px;
     align-items: center;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 10px 12px;
+}
+
+.favorites-label {
+    color: #777;
+    font-size: 9.5px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.favorites-list {
+    align-items: center;
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+    overflow-x: auto;
+    padding-bottom: 1px;
+}
+
+.favorites-empty {
+    color: #686868;
+    font-size: 10.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .favorite-chip {
-    display: flex;
     align-items: center;
-    gap: 2px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
-    padding: 4px 8px;
+    border-radius: 999px;
+    display: flex;
+    flex: 0 0 auto;
+    max-width: 155px;
+    overflow: hidden;
 }
 
 .favorite-chip-btn {
+    align-items: center;
     background: none;
     border: none;
-    color: #4a9eff;
+    cursor: pointer;
+    display: flex;
     font-size: 11.5px;
-    cursor: pointer;
-    font-weight: 600;
-    padding: 0;
-    transition: color 0.13s;
+    font-weight: 800;
+    gap: 5px;
+    min-width: 0;
+    padding: 5px 7px 5px 9px;
 }
 
-.favorite-chip-btn:hover {
-    color: #6ab4ff;
+.favorite-chip-btn span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.favorite-chip-star {
-    background: none;
+.favorite-chip-remove {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
     border: none;
-    color: #f5a623;
-    font-size: 12px;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    color: #8f8f8f;
     cursor: pointer;
-    padding: 2px;
-    transition: all 0.13s;
+    display: flex;
+    height: 24px;
+    justify-content: center;
+    padding: 0 7px;
 }
 
-.favorite-chip-star:hover {
-    transform: scale(1.1);
+.favorite-chip-remove:hover {
+    background: rgba(239, 75, 75, 0.14);
+    color: #ff9b9b;
 }
 
 /* ─── COUNTDOWN SECTION ─── */
@@ -2217,18 +2261,32 @@ body {
 }
 
 .search-item .fav-btn {
-    background: none;
-    border: none;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 999px;
     color: #f5a623;
-    font-size: 14px;
     cursor: pointer;
-    padding: 4px;
-    transition: all 0.13s;
+    display: flex;
     flex-shrink: 0;
+    font-size: 10.5px;
+    font-weight: 900;
+    gap: 4px;
+    height: 27px;
+    min-width: 62px;
+    padding: 0 8px;
+    transition: all 0.13s;
 }
 
 .search-item .fav-btn:hover {
-    transform: scale(1.15);
+    background: rgba(245, 166, 35, 0.12);
+    border-color: rgba(245, 166, 35, 0.28);
+    transform: translateY(-1px);
+}
+
+.search-item .fav-btn.active {
+    background: rgba(245, 166, 35, 0.14);
+    border-color: rgba(245, 166, 35, 0.32);
 }
 
 /* ─── BUTTONS ─── */
@@ -3958,7 +4016,7 @@ body {
 }
 
 .favorite-top-btn,
-.favorite-chip-star,
+.favorite-chip-remove,
 .search-item .fav-btn {
     color: #f2a92b;
 }
@@ -5244,7 +5302,8 @@ button,
 .theme-preset-grid button,
 .theme-accent-grid button,
 .manual-type-toggle button,
-.favorite-chip-star,
+.favorite-chip-btn,
+.favorite-chip-remove,
 .search-item .fav-btn {
     transition:
         background-color var(--motion-base) var(--motion-ease),

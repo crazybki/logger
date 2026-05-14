@@ -393,6 +393,17 @@ function Logger() {
     return jiraTickets.filter((ticket) => ticket.favorite);
   }, [jiraTickets]);
 
+  const selectedFavoriteTicket = useMemo(() => {
+    const value = search.trim().toLowerCase();
+    if (!value) return null;
+
+    return jiraTickets.find(
+      (ticket) =>
+        ticket.id.toLowerCase() === value ||
+        `${ticket.id} - ${ticket.title}`.toLowerCase() === value
+    ) || null;
+  }, [jiraTickets, search]);
+
   const activeEntry = useMemo(() => {
     return activeEntries.find((entry) => entry.id === activeEntryId) || null;
   }, [activeEntries, activeEntryId]);
@@ -984,20 +995,31 @@ function Logger() {
   }, [activeEntryId, selectedTicket, isMiniMode, miniTicket]);
 
   function toggleFavorite(id) {
+    let updatedTicket = null;
+
     setJiraTickets((prev) =>
-      prev.map((ticket) =>
-        ticket.id === id
-          ? { ...ticket, favorite: !ticket.favorite }
-          : ticket
-      )
+      prev.map((ticket) => {
+        if (ticket.id !== id) return ticket;
+
+        updatedTicket = { ...ticket, favorite: !ticket.favorite };
+        return updatedTicket;
+      })
     );
+
+    if (updatedTicket) {
+      setMessage(
+        updatedTicket.favorite
+          ? `Added ${updatedTicket.id} to favorites`
+          : `Removed ${updatedTicket.id} from favorites`
+      );
+    }
   }
 
   function handleAddFavoriteFromInput() {
     const value = search.trim();
 
     if (!value) {
-      setMessage("Skriv inn en ticket først");
+      setMessage("Type a ticket first");
       return;
     }
 
@@ -1008,6 +1030,11 @@ function Logger() {
     );
 
     if (existing) {
+      if (existing.favorite) {
+        toggleFavorite(existing.id);
+        return;
+      }
+
       setJiraTickets((prev) =>
         prev.map((t) =>
           t.id === existing.id ? { ...t, favorite: true } : t
@@ -3101,11 +3128,11 @@ PROJ-456;2026-05-11;2t`}</pre>
             <div style={{ width: '1px', height: '14px', background: 'rgba(255,255,255,0.12)', margin: '0 2px' }} />
             <button
               type="button"
-              className="favorite-top-btn"
+              className={`favorite-top-btn ${selectedFavoriteTicket?.favorite ? "active" : ""}`}
               onClick={handleAddFavoriteFromInput}
-              title="Add current ticket to favorites"
+              title={selectedFavoriteTicket?.favorite ? "Remove from favorites" : "Add current ticket to favorites"}
             >
-              <Icon name="star" size={15} />
+              <Icon name={selectedFavoriteTicket?.favorite ? "star" : "starOutline"} size={15} />
             </button>
           </div>
         </div>
@@ -3196,27 +3223,36 @@ PROJ-456;2026-05-11;2t`}</pre>
           </div>
         )}
 
-        <div className="favorites-row">
-          {favoriteTickets.map((ticket) => (
-            <div key={ticket.id} className="favorite-chip">
-              <button
-                type="button"
-                className="favorite-chip-btn"
-                onClick={() => handleSelectTicket(ticket)}
-              >
-                {ticket.id}
-              </button>
+        <div className="favorites-row" aria-label="Favorite tickets">
+          <span className="favorites-label">Favorites</span>
+          <div className="favorites-list">
+            {favoriteTickets.length ? (
+              favoriteTickets.map((ticket) => (
+                <div key={ticket.id} className="favorite-chip">
+                  <button
+                    type="button"
+                    className="favorite-chip-btn"
+                    onClick={() => handleSelectTicket(ticket)}
+                    title={ticket.title || ticket.id}
+                  >
+                    <Icon name="star" size={12} />
+                    <span>{ticket.id}</span>
+                  </button>
 
-              <button
-                type="button"
-                className="favorite-chip-star"
-                onClick={() => toggleFavorite(ticket.id)}
-                title="Remove favorite"
-              >
-                <Icon name="star" size={13} />
-              </button>
-            </div>
-          ))}
+                  <button
+                    type="button"
+                    className="favorite-chip-remove"
+                    onClick={() => toggleFavorite(ticket.id)}
+                    title={`Remove ${ticket.id} from favorites`}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <span className="favorites-empty">Use the star to pin tickets here</span>
+            )}
+          </div>
         </div>
 
         <div className="content-scroll">
@@ -3368,10 +3404,12 @@ PROJ-456;2026-05-11;2t`}</pre>
 
                         <button
                           type="button"
-                          className="fav-btn"
+                          className={`fav-btn ${ticket.favorite ? "active" : ""}`}
                           onClick={() => toggleFavorite(ticket.id)}
+                          title={ticket.favorite ? "Remove from favorites" : "Add to favorites"}
                         >
                           <Icon name={ticket.favorite ? "star" : "starOutline"} size={13} />
+                          <span>{ticket.favorite ? "Saved" : "Pin"}</span>
                         </button>
                       </li>
                     ))}
@@ -3459,10 +3497,12 @@ PROJ-456;2026-05-11;2t`}</pre>
 
                       <button
                         type="button"
-                        className="fav-btn"
+                        className={`fav-btn ${ticket.favorite ? "active" : ""}`}
                         onClick={() => toggleFavorite(ticket.id)}
+                        title={ticket.favorite ? "Remove from favorites" : "Add to favorites"}
                       >
                         <Icon name={ticket.favorite ? "star" : "starOutline"} size={13} />
+                        <span>{ticket.favorite ? "Saved" : "Pin"}</span>
                       </button>
                     </li>
                   ))}

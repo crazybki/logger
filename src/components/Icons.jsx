@@ -360,6 +360,19 @@ export const Icon = ({ name, size = 13, color }) => {
                 <path d="M8 1.5l1.6 4H14l-3.5 2.6 1.3 4L8 9.7l-3.8 2.4 1.3-4L2 5.5h4.4z" />
             </svg>
         ),
+        starOutline: (
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+            >
+                <path d="M8 1.8l1.6 3.7H14l-3.5 2.6 1.3 4L8 9.8l-3.8 2.3 1.3-4L2 5.5h4.4z" />
+            </svg>
+        ),
         dots: (
             <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="3" cy="8" r="1.5" />

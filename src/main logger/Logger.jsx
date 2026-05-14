@@ -1876,7 +1876,7 @@ function Logger() {
     const totalSeconds = hours * 3600 + minutes * 60;
 
     if (totalSeconds <= 0) {
-      setMessage("Tid mÃ¥ vÃ¦re stÃ¸rre enn 0");
+      setMessage("Time must be greater than 0");
       return;
     }
 
@@ -2157,7 +2157,7 @@ PROJ-456;2026-05-11;2t`}</pre>
           <strong>{activeReminderTask.title}</strong>
           <span>
             Kl. {formatReminderTime(activeReminderTask.reminder)}
-            {activeReminderTask.priority ? ` · ${activeReminderTask.priority} prioritet` : ""}
+            {activeReminderTask.priority ? ` - ${activeReminderTask.priority} priority` : ""}
           </span>
         </div>
       </div>
@@ -2263,7 +2263,7 @@ PROJ-456;2026-05-11;2t`}</pre>
         <span>Total owed</span>
         <strong>{formatMissingDelta(totalMissingSeconds)}</strong>
         <p>
-          Across {missingTimeDays.filter((day) => day.missingSeconds > 0).length} days · Target {formatTimeShort(dailyTargetSeconds)} / day
+          Across {missingTimeDays.filter((day) => day.missingSeconds > 0).length} days - Target {formatTimeShort(dailyTargetSeconds)} / day
         </p>
       </div>
 
@@ -2855,7 +2855,7 @@ PROJ-456;2026-05-11;2t`}</pre>
           className="modal-close"
           onClick={closeEditEntry}
         >
-          Ã—
+          <Icon name="close" size={13} />
         </button>
       </div>
 
@@ -3213,7 +3213,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                 onClick={() => toggleFavorite(ticket.id)}
                 title="Remove favorite"
               >
-                ★
+                <Icon name="star" size={13} />
               </button>
             </div>
           ))}
@@ -3337,7 +3337,9 @@ PROJ-456;2026-05-11;2t`}</pre>
 
               <section className="section ticket-controls">
                 <div className="search-row search-row-with-icon">
-                  <span className="search-icon">⌕</span>
+                  <span className="search-icon">
+                    <Icon name="search" size={13} />
+                  </span>
                   <input
                     ref={mainSearchRef}
                     type="text"
@@ -3352,7 +3354,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                         handleStartNewTicket();
                       }
                     }}
-                    placeholder="Skriv eller søk ticket"
+                    placeholder="Type or search ticket"
                   />
                 </div>
 
@@ -3369,7 +3371,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                           className="fav-btn"
                           onClick={() => toggleFavorite(ticket.id)}
                         >
-                          {ticket.favorite ? "★" : "☆"}
+                          <Icon name={ticket.favorite ? "star" : "starOutline"} size={13} />
                         </button>
                       </li>
                     ))}
@@ -3407,7 +3409,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                   <strong>Tasks</strong>
                   <span>
                     {activeTodoCount > 0
-                      ? `${activeTodoCount} active${activeReminderTask ? ` · next ${formatReminderTime(activeReminderTask.reminder)}` : ""}`
+                      ? `${activeTodoCount} active${activeReminderTask ? ` - next ${formatReminderTime(activeReminderTask.reminder)}` : ""}`
                       : "No active tasks"}
                   </span>
                 </span>
@@ -3426,7 +3428,9 @@ PROJ-456;2026-05-11;2t`}</pre>
               </div>
 
               <div className="search-row search-row-with-icon">
-                <span className="search-icon">⌕</span>
+                <span className="search-icon">
+                  <Icon name="search" size={13} />
+                </span>
                 <input
                   ref={mainSearchRef}
                   type="text"
@@ -3441,7 +3445,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                       handleStartNewTicket();
                     }
                   }}
-                  placeholder="Skriv eller søk ticket"
+                  placeholder="Type or search ticket"
                 />
               </div>
 
@@ -3458,7 +3462,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                         className="fav-btn"
                         onClick={() => toggleFavorite(ticket.id)}
                       >
-                        {ticket.favorite ? "★" : "☆"}
+                        <Icon name={ticket.favorite ? "star" : "starOutline"} size={13} />
                       </button>
                     </li>
                   ))}
@@ -3617,7 +3621,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                               <span className={`entry-status ${entry.status}`}>
                                 {entry.status === 'running' ? 'aktiv' : entry.status === 'paused' ? 'paused' : 'Done'}
                               </span>
-                              <span className="entry-meta-separator">·</span>
+                              <span className="entry-meta-separator">-</span>
                               <span className="entry-date">{formatDateShort(entry.createdAt)}</span>
                             </div>
                           </div>

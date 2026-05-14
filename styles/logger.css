@@ -5058,8 +5058,8 @@ body {
 }
 
 .manual-entry-top {
-    background: linear-gradient(145deg, rgba(17, 21, 34, 0.98), rgba(9, 14, 23, 0.98));
-    border: 1px solid rgba(139, 92, 255, 0.22);
+    background: linear-gradient(145deg, var(--theme-panel), var(--theme-surface));
+    border: 1px solid var(--theme-border-strong);
     border-radius: 8px;
     margin: 12px;
 }
@@ -5071,12 +5071,12 @@ body {
 }
 
 .manual-type-toggle {
-    background: #0f1420;
-    border-color: rgba(139, 92, 255, 0.16);
+    background: var(--theme-field);
+    border-color: var(--theme-border);
 }
 
 .manual-type-toggle button.active {
-    background: rgba(47, 125, 255, 0.85);
+    background: var(--theme-blue);
 }
 
 .mini-shell,
@@ -5088,8 +5088,8 @@ body {
 }
 
 .mini-shell > .mini-header {
-    background: #090d16;
-    border-bottom: 1px solid rgba(139, 92, 255, 0.12);
+    background: var(--theme-surface);
+    border-bottom: 1px solid var(--theme-border);
     padding-top: 6px;
 }
 
@@ -5105,9 +5105,9 @@ body {
 }
 
 .mini-action-btn:hover:not(:disabled) {
-    background: rgba(139, 92, 255, 0.14);
-    border-color: rgba(139, 92, 255, 0.3);
-    color: #dce4ff;
+    background: var(--theme-purple-soft);
+    border-color: var(--theme-border-strong);
+    color: var(--theme-text);
 }
 
 .logged-section .entry-group-total {

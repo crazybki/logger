@@ -151,6 +151,12 @@ function Logger() {
   const [manualHours, setManualHours] = useState("");
   const [manualMinutes, setManualMinutes] = useState("");
   const [manualFocused, setManualFocused] = useState(null);
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [editTicket, setEditTicket] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editHours, setEditHours] = useState("");
+  const [editMinutes, setEditMinutes] = useState("");
+  const [editFocused, setEditFocused] = useState(null);
 
   const manualTicketRef = useRef(null);
   const mainSearchRef = useRef(null);
@@ -1059,6 +1065,14 @@ function Logger() {
     return value.replace(/\D/g, "").slice(0, maxLength);
   }
 
+  function secondsToDurationParts(seconds) {
+    const safeSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+    return {
+      hours: String(Math.floor(safeSeconds / 3600)),
+      minutes: String(Math.floor((safeSeconds % 3600) / 60)).padStart(2, "0"),
+    };
+  }
+
   function applyElapsedTime(entry, timestamp = Date.now()) {
     if (!entry || entry.status !== "running") return entry;
 
@@ -1735,6 +1749,7 @@ function Logger() {
     setShowMissingTimeView(false);
     setShowReportsView(false);
     setShowSettingsView(false);
+    setEditingEntryId(null);
     setManualTicket(prefill);
     setManualEntryType(entryType);
     setManualDate(getTodayDate());
@@ -1742,6 +1757,33 @@ function Logger() {
     setManualMinutes("");
     setManualFocused(null);
     setShowManualModal(true);
+  }
+
+  function openEditEntry(entry) {
+    const syncedEntry = applyElapsedTime(entry, Date.now());
+    const duration = secondsToDurationParts(syncedEntry.seconds);
+
+    setShowTrashView(false);
+    setShowMissingTimeView(false);
+    setShowReportsView(false);
+    setShowSettingsView(false);
+    setShowManualModal(false);
+    setTodoContextMenu(null);
+    setEditingEntryId(entry.id);
+    setEditTicket(syncedEntry.ticketName || "");
+    setEditDate(getDateKey(syncedEntry) || getTodayDate());
+    setEditHours(duration.hours);
+    setEditMinutes(duration.minutes);
+    setEditFocused(null);
+  }
+
+  function closeEditEntry() {
+    setEditingEntryId(null);
+    setEditTicket("");
+    setEditDate("");
+    setEditHours("");
+    setEditMinutes("");
+    setEditFocused(null);
   }
 
   function handleSaveSettings(nextSettings) {
@@ -1814,6 +1856,59 @@ function Logger() {
     if (crossesDailyTarget) {
       notifyDailyTargetReached(todayLoggedSeconds + totalSeconds);
     }
+  }
+
+  function handleSaveEditedEntry() {
+    if (!editingEntryId) return;
+
+    if (!editTicket.trim()) {
+      setMessage("Skriv inn ticket-navn");
+      return;
+    }
+
+    if (!editDate) {
+      setMessage("Velg en dato");
+      return;
+    }
+
+    const hours = toNumber(editHours);
+    const minutes = toNumber(editMinutes);
+    const totalSeconds = hours * 3600 + minutes * 60;
+
+    if (totalSeconds <= 0) {
+      setMessage("Tid mÃ¥ vÃ¦re stÃ¸rre enn 0");
+      return;
+    }
+
+    const timestamp = Date.now();
+    setEntries((prev) =>
+      prev.map((entry) => {
+        if (entry.id !== editingEntryId) {
+          return entry.status === "running" && !entry.deletedAt
+            ? applyElapsedTime(entry, timestamp)
+            : entry;
+        }
+
+        const syncedEntry = applyElapsedTime(entry, timestamp);
+        return {
+          ...syncedEntry,
+          ticketName: editTicket.trim(),
+          seconds: totalSeconds,
+          createdAt: editDate,
+          dateKey: editDate,
+          status: syncedEntry.status === "running" ? "paused" : syncedEntry.status,
+          lastTickAt: undefined,
+        };
+      })
+    );
+
+    if (editingEntryId === activeEntryId) {
+      setActiveEntryId(null);
+    }
+
+    closeEditEntry();
+    setMessageTone("success");
+    setMessage("Entry updated");
   }
 
   async function handleExportCSV() {
@@ -1958,6 +2053,7 @@ function Logger() {
   }
 
   const canSaveManual = Boolean(manualTicket.trim() && (manualHours || manualMinutes));
+  const canSaveEdit = Boolean(editTicket.trim() && editDate && (editHours || editMinutes));
   const miniHasTicket = miniTicket.trim() !== "";
   const miniIsRunning = activeEntryId != null;
   const remainingPercent = Math.max(0, Math.min(100, (countdownSeconds / dailyTargetSeconds) * 100));
@@ -2747,6 +2843,109 @@ PROJ-456;2026-05-11;2t`}</pre>
     </section>
   );
 
+  const editEntrySection = editingEntryId && (
+    <section className="section manual-entry-top edit-entry-panel">
+      <div className="modal-header">
+        <div>
+          <h2>Edit Entry</h2>
+          <p>Update ticket, date, and logged time</p>
+        </div>
+        <button
+          type="button"
+          className="modal-close"
+          onClick={closeEditEntry}
+        >
+          Ã—
+        </button>
+      </div>
+
+      <form
+        className="manual-entry-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          handleSaveEditedEntry();
+        }}
+      >
+        <div className="modal-body">
+          <label className="manual-field">
+            <span className="manual-field-label">Ticket</span>
+            <input
+              type="text"
+              value={editTicket}
+              onChange={(event) => setEditTicket(event.target.value)}
+              onFocus={() => setEditFocused("ticket")}
+              onBlur={() => setEditFocused(null)}
+              className={editFocused === "ticket" ? "focused" : ""}
+              placeholder="Ticket"
+            />
+          </label>
+
+          <label className="manual-field">
+            <span className="manual-field-label">Date and duration</span>
+            <div className="manual-row">
+              <input
+                type="date"
+                value={editDate}
+                onChange={(event) => setEditDate(event.target.value)}
+                onFocus={() => setEditFocused("date")}
+                onBlur={() => setEditFocused(null)}
+                className={editFocused === "date" ? "focused" : ""}
+              />
+
+              <div className="manual-duration-field">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={editHours}
+                  onChange={(event) => setEditHours(onlyDigits(event.target.value, 3))}
+                  onFocus={() => setEditFocused("hours")}
+                  onBlur={() => setEditFocused(null)}
+                  className={editFocused === "hours" ? "focused" : ""}
+                  placeholder="0"
+                />
+                <span>HRS</span>
+              </div>
+
+              <span className="manual-duration-separator">:</span>
+
+              <div className="manual-duration-field">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={editMinutes}
+                  onChange={(event) => setEditMinutes(onlyDigits(event.target.value))}
+                  onFocus={() => setEditFocused("minutes")}
+                  onBlur={() => setEditFocused(null)}
+                  className={editFocused === "minutes" ? "focused" : ""}
+                  placeholder="0"
+                />
+                <span>MIN</span>
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="manual-entry-cancel"
+            onClick={closeEditEntry}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="manual-entry-save"
+            disabled={!canSaveEdit}
+          >
+            <Icon name="check" size={13} color={canSaveEdit ? "#fff" : "#446"} />
+            Save Changes
+          </button>
+        </div>
+      </form>
+    </section>
+  );
+
   if (isMiniMode) {
     return (
       <>
@@ -2942,6 +3141,11 @@ PROJ-456;2026-05-11;2t`}</pre>
               </button>
             )}
 
+            <button type="button" onClick={() => openEditEntry(todoContextMenu.entry)}>
+              <Icon name="edit" size={13} />
+              <span>Edit entry</span>
+            </button>
+
             <button type="button" onClick={() => openTodoFromTicket(todoContextMenu.entry)}>
               <Icon name="todo" size={13} />
               <span>Legg til som task</span>
@@ -3060,9 +3264,11 @@ PROJ-456;2026-05-11;2t`}</pre>
 
           {showTodoPanel && todoPanel}
 
+          {editEntrySection}
+
           {showManualModal && manualSection}
 
-          {!showManualModal && (
+          {!showManualModal && !editingEntryId && (
             <>
               <section className="section remaining-card">
                 <div className="remaining-copy">
@@ -3366,6 +3572,15 @@ PROJ-456;2026-05-11;2t`}</pre>
                                 <span className="entry-time">{formatTimeShort(entry.seconds)}</span>
 
                                 <div className="entry-actions">
+                                  <button
+                                    type="button"
+                                    className="entry-action-btn"
+                                    onClick={() => openEditEntry(entry)}
+                                    title="Edit"
+                                  >
+                                    <Icon name="edit" size={13} />
+                                  </button>
+
                                   <button
                                     type="button"
                                     className="entry-action-btn todo"

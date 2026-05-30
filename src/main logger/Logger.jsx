@@ -27,6 +27,103 @@ const SECURE_STORE_KEYS = [
   "countdownResetDate",
 ];
 
+const UI_TEXT = {
+  no: {
+    reminders: "Påminnelser",
+    tasks: "Tasks",
+    review: "Review",
+    endDay: "Avslutt dag",
+    export: "Eksport",
+    dueNow: "Nå",
+    scheduled: "Planlagt",
+    noReminders: "Ingen task-påminnelser",
+    snoozedUntil: "Utsatt til",
+    done: "Ferdig",
+    logged: "Logget",
+    remaining: "Gjenstår",
+    add: "Legg til",
+    closeDay: "Lukk dag",
+    noActiveOrTasks: "Ingen aktiv timer eller åpne tasks",
+    today: "I dag",
+    thisWeek: "Denne uka",
+    tasksOnly: "Kun tasks",
+    allActive: "Alle aktive",
+    copyJira: "Kopier Jira",
+    preview: "Preview",
+    noEntriesPreset: "Ingen entries i valgt preset",
+    all: "All",
+    overdue: "Overdue",
+    noReminder: "Uten tid",
+    back: "Tilbake",
+    activeTicket: "Aktiv ticket",
+    noActiveTicket: "Ingen aktiv ticket",
+    running: "Kjører",
+    startOrSelect: "Start eller velg ticket under",
+    switchTicket: "Bytt",
+    remainingToday: "Gjenstår i dag",
+    addTask: "Legg til",
+    newTaskPlaceholder: "Ny task...",
+    startTicketPlaceholder: "Start ticket...",
+    longTimer: "Lang timer",
+    loggedWord: "logget",
+    isThisRight: "Stemmer dette?",
+    looksRight: "Stemmer",
+    adjust: "Juster",
+    open: "Åpne",
+    hide: "Skjul",
+    active: "aktive",
+    noneActiveTasks: "Ingen aktive tasks",
+    loggedTime: "Logget tid",
+  },
+  en: {
+    reminders: "Reminders",
+    tasks: "Tasks",
+    review: "Review",
+    endDay: "End day",
+    export: "Export",
+    dueNow: "Due now",
+    scheduled: "Scheduled",
+    noReminders: "No task reminders",
+    snoozedUntil: "Snoozed until",
+    done: "Done",
+    logged: "Logged",
+    remaining: "Remaining",
+    add: "Add",
+    closeDay: "Close day",
+    noActiveOrTasks: "No active timer or open tasks",
+    today: "Today",
+    thisWeek: "This week",
+    tasksOnly: "Tasks only",
+    allActive: "All active",
+    copyJira: "Copy Jira",
+    preview: "Preview",
+    noEntriesPreset: "No entries in selected preset",
+    all: "All",
+    overdue: "Overdue",
+    noReminder: "No reminder",
+    back: "Back",
+    activeTicket: "Active ticket",
+    noActiveTicket: "No active ticket",
+    running: "Running",
+    startOrSelect: "Start or select a ticket below",
+    switchTicket: "Switch",
+    remainingToday: "Remaining today",
+    addTask: "Add",
+    newTaskPlaceholder: "Capture task...",
+    startTicketPlaceholder: "Start ticket...",
+    longTimer: "Long timer",
+    loggedWord: "logged",
+    isThisRight: "Is this right?",
+    looksRight: "Looks right",
+    adjust: "Adjust",
+    open: "Open",
+    hide: "Hide",
+    active: "active",
+    noneActiveTasks: "No active tasks",
+    loggedTime: "Logged time",
+  },
+};
+
 function Logger() {
   const [search, setSearch] = useState("");
   const [selectedTicket, setSelectedTicket] = useState("");
@@ -39,9 +136,23 @@ function Logger() {
   const [showMissingTimeView, setShowMissingTimeView] = useState(false);
   const [showReportsView, setShowReportsView] = useState(false);
   const [showSettingsView, setShowSettingsView] = useState(false);
+  const [showReminderInbox, setShowReminderInbox] = useState(false);
+  const [showEndDayView, setShowEndDayView] = useState(false);
+  const [showExportView, setShowExportView] = useState(false);
   const [missingTimeFilter, setMissingTimeFilter] = useState("missing");
   const [trashTab, setTrashTab] = useState("tickets");
   const [trashSearch, setTrashSearch] = useState("");
+  const [quickCaptureType, setQuickCaptureType] = useState("task");
+  const [quickCaptureText, setQuickCaptureText] = useState("");
+  const [todoFilter, setTodoFilter] = useState("all");
+  const [dismissedLongTimerId, setDismissedLongTimerId] = useState(null);
+  const [exportPreset, setExportPreset] = useState(() => {
+    try {
+      return localStorage.getItem("exportPreset") || "today";
+    } catch {
+      return "today";
+    }
+  });
   const [secureStoreReady, setSecureStoreReady] = useState(() => {
     return !window.loggerAPI?.secureStoreGetAll;
   });
@@ -71,6 +182,13 @@ function Logger() {
       return Number(localStorage.getItem("trashRetentionDays")) || 7;
     } catch {
       return 7;
+    }
+  });
+  const [appLanguage, setAppLanguage] = useState(() => {
+    try {
+      return localStorage.getItem("appLanguage") || "no";
+    } catch {
+      return "no";
     }
   });
   const [miniTicket, setMiniTicket] = useState("");
@@ -158,9 +276,12 @@ function Logger() {
   const [editMinutes, setEditMinutes] = useState("");
   const [editFocused, setEditFocused] = useState(null);
 
+  const text = UI_TEXT[appLanguage] || UI_TEXT.no;
+
   const manualTicketRef = useRef(null);
   const mainSearchRef = useRef(null);
   const miniTicketRef = useRef(null);
+  const quickCaptureRef = useRef(null);
   const dailyTargetNotificationRef = useRef("");
   const taskNotificationRef = useRef("");
 
@@ -408,13 +529,44 @@ function Logger() {
     return activeEntries.find((entry) => entry.id === activeEntryId) || null;
   }, [activeEntries, activeEntryId]);
 
+  const longRunningEntry = useMemo(() => {
+    if (!activeEntry || activeEntry.status !== "running") return null;
+    if (dismissedLongTimerId === activeEntry.id) return null;
+
+    const syncedEntry = applyElapsedTime(activeEntry, nowTick);
+    return syncedEntry.seconds >= 3 * 60 * 60 ? syncedEntry : null;
+  }, [activeEntry, dismissedLongTimerId, nowTick]);
+
   const activeTodoCount = useMemo(() => {
     return activeTodoTasks.filter((task) => !task.done).length;
   }, [activeTodoTasks]);
 
+  function getTodoReminderDayStatus(task) {
+    if (!task.reminder) return "none";
+
+    const reminderDate = new Date(task.reminder);
+    const reminderTime = reminderDate.getTime();
+    if (Number.isNaN(reminderTime)) return "none";
+
+    const reminderDateKey = getDateKeyFromDate(reminderDate);
+    if (reminderTime <= nowTick) return "overdue";
+    if (reminderDateKey === todayDateKey) return "today";
+    return "later";
+  }
+
   const visibleTodoTasks = useMemo(() => {
-    return activeTodoTasks.filter((task) => !task.done);
-  }, [activeTodoTasks]);
+    return activeTodoTasks.filter((task) => {
+      if (task.done) return false;
+      const reminderStatus = getTodoReminderDayStatus(task);
+
+      if (todoFilter === "today") {
+        return reminderStatus === "today" || reminderStatus === "overdue";
+      }
+      if (todoFilter === "overdue") return reminderStatus === "overdue";
+      if (todoFilter === "none") return reminderStatus === "none";
+      return true;
+    });
+  }, [activeTodoTasks, nowTick, todayDateKey, todoFilter]);
 
   const activeReminderTask = useMemo(() => {
     return activeTodoTasks.find((task) => {
@@ -430,6 +582,35 @@ function Logger() {
       return !snoozedUntil || snoozedUntil <= nowTick;
     }) || null;
   }, [activeTodoTasks, nowTick]);
+
+  const reminderInboxTasks = useMemo(() => {
+    return activeTodoTasks
+      .filter((task) => !task.done && task.reminder)
+      .map((task) => {
+        const reminderTime = new Date(task.reminder).getTime();
+        const snoozedUntil = task.snoozedUntil
+          ? new Date(task.snoozedUntil).getTime()
+          : 0;
+        const isSnoozed = snoozedUntil > nowTick;
+        const isDue = !Number.isNaN(reminderTime) && reminderTime <= nowTick;
+
+        return {
+          ...task,
+          reminderTime,
+          snoozedUntilTime: snoozedUntil,
+          reminderStatus: isSnoozed ? "snoozed" : isDue ? "due" : "upcoming",
+        };
+      })
+      .sort((a, b) => {
+        const aTime = a.snoozedUntilTime || a.reminderTime || 0;
+        const bTime = b.snoozedUntilTime || b.reminderTime || 0;
+        return aTime - bTime;
+      });
+  }, [activeTodoTasks, nowTick]);
+
+  const dueReminderCount = useMemo(() => {
+    return reminderInboxTasks.filter((task) => task.reminderStatus === "due").length;
+  }, [reminderInboxTasks]);
 
   const showStorageWarning = useMemo(() => {
     if (storagePercent > 20) return false;
@@ -554,6 +735,14 @@ function Logger() {
   useEffect(() => {
     localStorage.setItem("trashRetentionDays", String(trashRetentionDays));
   }, [trashRetentionDays]);
+
+  useEffect(() => {
+    localStorage.setItem("appLanguage", appLanguage);
+  }, [appLanguage]);
+
+  useEffect(() => {
+    localStorage.setItem("exportPreset", exportPreset);
+  }, [exportPreset]);
 
   useEffect(() => {
     localStorage.setItem("dailyTargetSeconds", String(dailyTargetSeconds));
@@ -894,6 +1083,32 @@ function Logger() {
         return;
       }
 
+      if (e.altKey && key === "r") {
+        e.preventDefault();
+        openReminderInbox();
+        return;
+      }
+
+      if (e.altKey && key === "e") {
+        e.preventDefault();
+        openEndDayView();
+        return;
+      }
+
+      if (e.altKey && key === "x") {
+        e.preventDefault();
+        openExportView();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && key === "k") {
+        e.preventDefault();
+        closePrimaryViews();
+        setIsMiniMode(false);
+        setTimeout(() => quickCaptureRef.current?.focus(), 0);
+        return;
+      }
+
       if (!showManualModal && activeEntryId != null && (key === "d" || key === "f")) {
         e.preventDefault();
         handleFinish(activeEntryId);
@@ -954,6 +1169,9 @@ function Logger() {
         if (showManualModal) {
           e.preventDefault();
           setShowManualModal(false);
+        } else if (showReminderInbox || showEndDayView || showExportView) {
+          e.preventDefault();
+          closePrimaryViews();
         } else if (isMiniMode) {
           e.preventDefault();
           setIsMiniMode(false);
@@ -963,7 +1181,7 @@ function Logger() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeEntryId, selectedTicket, showManualModal, isMiniMode, activeEntry, showShortcuts, miniTicket, lastMergeUndo]);
+  }, [activeEntryId, selectedTicket, showManualModal, isMiniMode, activeEntry, showShortcuts, miniTicket, lastMergeUndo, showReminderInbox, showEndDayView, showExportView]);
 
   useEffect(() => {
     if (!window.loggerAPI) return;
@@ -1456,83 +1674,97 @@ function Logger() {
     });
   }
 
-  function snoozeTodoReminder(minutes) {
-    if (!activeReminderTask) return;
+  function snoozeTaskReminder(task, minutes) {
+    if (!task) return;
 
     const snoozedUntil = new Date(Date.now() + minutes * 60 * 1000).toISOString();
 
     setTodoTasks((prev) =>
-      prev.map((task) =>
-        task.id === activeReminderTask.id
-          ? { ...task, snoozedUntil, reminderDismissed: false }
-          : task
+      prev.map((item) =>
+        item.id === task.id
+          ? { ...item, snoozedUntil, reminderDismissed: false }
+          : item
       )
     );
     setShowTodoSnoozeMenu(false);
   }
 
-  function snoozeTodoReminderUntilTomorrow() {
-    if (!activeReminderTask) return;
+  function snoozeTodoReminder(minutes) {
+    snoozeTaskReminder(activeReminderTask, minutes);
+  }
+
+  function snoozeTaskReminderUntilTomorrow(task) {
+    if (!task) return;
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(9, 0, 0, 0);
 
     setTodoTasks((prev) =>
-      prev.map((task) =>
-        task.id === activeReminderTask.id
-          ? { ...task, snoozedUntil: tomorrow.toISOString(), reminderDismissed: false }
-          : task
+      prev.map((item) =>
+        item.id === task.id
+          ? { ...item, snoozedUntil: tomorrow.toISOString(), reminderDismissed: false }
+          : item
+      )
+    );
+    setShowTodoSnoozeMenu(false);
+  }
+
+  function snoozeTodoReminderUntilTomorrow() {
+    snoozeTaskReminderUntilTomorrow(activeReminderTask);
+  }
+
+  function dismissTaskReminder(task) {
+    if (!task) return;
+
+    setTodoTasks((prev) =>
+      prev.map((item) =>
+        item.id === task.id ? { ...item, reminderDismissed: true } : item
       )
     );
     setShowTodoSnoozeMenu(false);
   }
 
   function dismissTodoReminder() {
-    if (!activeReminderTask) return;
+    dismissTaskReminder(activeReminderTask);
+  }
+
+  function startTaskReminder(task) {
+    if (!task) return;
+
+    const existingEntry = getTodoTimerEntry(task.id);
+
+    if (existingEntry?.id === activeEntryId) {
+      setMessage("Task timer kjører allerede");
+    } else {
+      handleStartTodoTimer(task);
+    }
 
     setTodoTasks((prev) =>
-      prev.map((task) =>
-        task.id === activeReminderTask.id
-          ? { ...task, reminderDismissed: true }
-          : task
+      prev.map((item) =>
+        item.id === task.id ? { ...item, reminderDismissed: true } : item
       )
     );
     setShowTodoSnoozeMenu(false);
   }
 
   function startTodoReminder() {
-    if (!activeReminderTask) return;
+    startTaskReminder(activeReminderTask);
+  }
 
-    const existingEntry = getTodoTimerEntry(activeReminderTask.id);
-
-    if (existingEntry?.id === activeEntryId) {
-      setMessage("Task timer kjører allerede");
-    } else {
-      handleStartTodoTimer(activeReminderTask);
-    }
+  function completeTaskReminder(task) {
+    if (!task) return;
 
     setTodoTasks((prev) =>
-      prev.map((task) =>
-        task.id === activeReminderTask.id
-          ? { ...task, reminderDismissed: true }
-          : task
+      prev.map((item) =>
+        item.id === task.id ? { ...item, done: true, reminderDismissed: true } : item
       )
     );
     setShowTodoSnoozeMenu(false);
   }
 
   function completeTodoReminder() {
-    if (!activeReminderTask) return;
-
-    setTodoTasks((prev) =>
-      prev.map((task) =>
-        task.id === activeReminderTask.id
-          ? { ...task, done: true, reminderDismissed: true }
-          : task
-      )
-    );
-    setShowTodoSnoozeMenu(false);
+    completeTaskReminder(activeReminderTask);
   }
 
   function snoozeStorageWarning(hours = 24) {
@@ -1549,6 +1781,9 @@ function Logger() {
     setShowMissingTimeView(false);
     setShowReportsView(false);
     setShowSettingsView(false);
+    setShowReminderInbox(false);
+    setShowEndDayView(false);
+    setShowExportView(false);
     setIsMiniMode(false);
     setShowManualModal(false);
     setShowTodoPanel(false);
@@ -1560,6 +1795,9 @@ function Logger() {
     setShowTrashView(false);
     setShowReportsView(false);
     setShowSettingsView(false);
+    setShowReminderInbox(false);
+    setShowEndDayView(false);
+    setShowExportView(false);
     setIsMiniMode(false);
     setShowManualModal(false);
     setShowTodoPanel(false);
@@ -1570,6 +1808,9 @@ function Logger() {
     setShowTrashView(false);
     setShowMissingTimeView(false);
     setShowSettingsView(false);
+    setShowReminderInbox(false);
+    setShowEndDayView(false);
+    setShowExportView(false);
     setIsMiniMode(false);
     setShowManualModal(false);
     setShowTodoPanel(false);
@@ -1580,6 +1821,9 @@ function Logger() {
     setShowTrashView(false);
     setShowMissingTimeView(false);
     setShowReportsView(false);
+    setShowReminderInbox(false);
+    setShowEndDayView(false);
+    setShowExportView(false);
     setIsMiniMode(false);
     setShowManualModal(false);
     setShowTodoPanel(false);
@@ -1771,11 +2015,44 @@ function Logger() {
     setMessage("Countdown reset");
   }
 
+  function closePrimaryViews() {
+    setShowTrashView(false);
+    setShowMissingTimeView(false);
+    setShowReportsView(false);
+    setShowSettingsView(false);
+    setShowReminderInbox(false);
+    setShowEndDayView(false);
+    setShowExportView(false);
+    setShowManualModal(false);
+    setEditingEntryId(null);
+  }
+
+  function openReminderInbox() {
+    closePrimaryViews();
+    setShowReminderInbox(true);
+    setIsMiniMode(false);
+  }
+
+  function openEndDayView() {
+    closePrimaryViews();
+    setShowEndDayView(true);
+    setIsMiniMode(false);
+  }
+
+  function openExportView() {
+    closePrimaryViews();
+    setShowExportView(true);
+    setIsMiniMode(false);
+  }
+
   function openManual(prefill = "", entryType = "ticket") {
     setShowTrashView(false);
     setShowMissingTimeView(false);
     setShowReportsView(false);
     setShowSettingsView(false);
+    setShowReminderInbox(false);
+    setShowEndDayView(false);
+    setShowExportView(false);
     setEditingEntryId(null);
     setManualTicket(prefill);
     setManualEntryType(entryType);
@@ -1794,6 +2071,9 @@ function Logger() {
     setShowMissingTimeView(false);
     setShowReportsView(false);
     setShowSettingsView(false);
+    setShowReminderInbox(false);
+    setShowEndDayView(false);
+    setShowExportView(false);
     setShowManualModal(false);
     setTodoContextMenu(null);
     setEditingEntryId(entry.id);
@@ -1818,9 +2098,10 @@ function Logger() {
     setTrashRetentionDays(nextSettings.trashRetentionDays);
     setThemePreset(nextSettings.themePreset);
     setThemeAccentColor(nextSettings.themeAccentColor);
+    setAppLanguage(nextSettings.appLanguage || "no");
     setShowSettingsView(false);
     setMessageTone("success");
-    setMessage("Settings saved");
+    setMessage(nextSettings.appLanguage === "en" ? "Settings saved" : "Innstillinger lagret");
   }
 
   function handleSaveManualEntry() {
@@ -1938,16 +2219,120 @@ function Logger() {
     setMessage("Entry updated");
   }
 
-  async function handleExportCSV() {
-    if (!activeEntries.length) {
+  function handleQuickCaptureSubmit() {
+    const value = quickCaptureText.trim();
+
+    if (!value) {
+      setMessage(quickCaptureType === "task" ? "Skriv inn en task" : "Skriv inn en ticket");
+      return;
+    }
+
+    if (quickCaptureType === "task") {
+      const timestamp = Date.now();
+      setTodoTasks((prev) => [
+        {
+          id: timestamp,
+          title: value,
+          priority: "normal",
+          reminder: getDefaultTodoReminder(),
+          notes: "",
+          sourceTicket: selectedTicket || activeEntry?.ticketName || "",
+          done: false,
+          createdAt: new Date(timestamp).toISOString(),
+        },
+        ...prev,
+      ]);
+      setMessageTone("success");
+      setMessage("Task lagt til");
+    } else {
+      startEntry(value);
+    }
+
+    setQuickCaptureText("");
+  }
+
+  function getExportEntriesForPreset(preset = exportPreset) {
+    const weekdayKeys = new Set(getCurrentWeekdayKeys());
+
+    return activeEntries.filter((entry) => {
+      const dateKey = getDateKey(entry);
+
+      if (preset === "today") return dateKey === todayDateKey;
+      if (preset === "week") return weekdayKeys.has(dateKey);
+      if (preset === "tasks") return entry.source === "todo" || entry.todoTaskId;
+      return true;
+    });
+  }
+
+  function getJiraCopyText(preset = exportPreset) {
+    const entriesToCopy = getExportEntriesForPreset(preset)
+      .map((entry) => applyElapsedTime(entry, nowTick))
+      .sort((a, b) => {
+        const dateCompare = getDateKey(a).localeCompare(getDateKey(b));
+        if (dateCompare !== 0) return dateCompare;
+        return String(a.ticketName || "").localeCompare(String(b.ticketName || ""));
+      });
+
+    const lines = entriesToCopy.map((entry) => {
+      const dateKey = getDateKey(entry);
+      return `${dateKey} | ${entry.ticketName} | ${formatTimeShort(entry.seconds)}`;
+    });
+
+    const totalSeconds = entriesToCopy.reduce((sum, entry) => sum + entry.seconds, 0);
+    return [...lines, `Total | ${formatTimeShort(totalSeconds)}`].join("\n");
+  }
+
+  async function handleCopyJiraFormat(preset = exportPreset) {
+    const text = getJiraCopyText(preset);
+
+    if (!text || text.startsWith("Total | 0m")) {
+      setMessage("Ingen entries å kopiere");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessageTone("success");
+      setMessage("Copied Jira format");
+    } catch (error) {
+      console.error("Could not copy Jira format:", error);
+      setMessage("Could not copy Jira format");
+    }
+  }
+
+  function getExportPreviewLines(preset = exportPreset) {
+    return getJiraCopyText(preset).split("\n").filter(Boolean).slice(0, 5);
+  }
+
+  function handleCloseDay() {
+    const timestamp = Date.now();
+
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.status === "running" && !entry.deletedAt
+          ? { ...applyElapsedTime(entry, timestamp), status: "paused", lastTickAt: undefined }
+          : entry
+      )
+    );
+    setActiveEntryId(null);
+    setNowTick(timestamp);
+    setMessageTone("success");
+    setMessage("Day reviewed");
+  }
+
+  async function handleExportCSV(preset = exportPreset) {
+    const entriesToExport = getExportEntriesForPreset(preset);
+
+    if (!entriesToExport.length) {
       setMessage("Ingen entries å eksportere");
       return;
     }
 
     try {
-      const exportEntries = activeEntries.map((entry) => ({
+      const exportEntries = entriesToExport.map((entry) => ({
         ...entry,
-        formatted: formatTime(entry.seconds),
+        formatted: formatTime(applyElapsedTime(entry, nowTick).seconds),
+        seconds: applyElapsedTime(entry, nowTick).seconds,
       }));
 
       const result = await window.loggerAPI?.exportEntriesToCSV(exportEntries);
@@ -2076,6 +2461,9 @@ function Logger() {
     });
     setShowTrashView(false);
     setShowMissingTimeView(false);
+    setShowReminderInbox(false);
+    setShowEndDayView(false);
+    setShowExportView(false);
     setShowManualModal(false);
   }
 
@@ -2152,6 +2540,22 @@ PROJ-456;2026-05-11;2t`}</pre>
             <div>
               <span>To-do panel</span>
               <span><kbd>Alt</kbd><em>+</em><kbd>T</kbd></span>
+            </div>
+            <div>
+              <span>Hurtigfangst</span>
+              <span><kbd>Ctrl</kbd><em>+</em><kbd>K</kbd></span>
+            </div>
+            <div>
+              <span>Påminnelser</span>
+              <span><kbd>Alt</kbd><em>+</em><kbd>R</kbd></span>
+            </div>
+            <div>
+              <span>Avslutt dag</span>
+              <span><kbd>Alt</kbd><em>+</em><kbd>E</kbd></span>
+            </div>
+            <div>
+              <span>Eksport</span>
+              <span><kbd>Alt</kbd><em>+</em><kbd>X</kbd></span>
             </div>
             <div>
               <span>Missing time</span>
@@ -2268,6 +2672,201 @@ PROJ-456;2026-05-11;2t`}</pre>
       </div>
     </div>
   );
+
+  const reminderInboxView = (
+    <section className="smart-view">
+      <div className="smart-view-header">
+        <div>
+          <span>Tasks</span>
+          <h2>{text.reminders}</h2>
+        </div>
+        <button type="button" className="todo-close-btn" onClick={() => setShowReminderInbox(false)}>
+          <Icon name="close" size={13} />
+        </button>
+      </div>
+
+      <div className="smart-summary-grid">
+        <div>
+          <span>{text.dueNow}</span>
+          <strong>{dueReminderCount}</strong>
+        </div>
+        <div>
+          <span>{text.scheduled}</span>
+          <strong>{reminderInboxTasks.length}</strong>
+        </div>
+      </div>
+
+      <div className="smart-list">
+        {reminderInboxTasks.length === 0 ? (
+          <p className="smart-empty">{text.noReminders}</p>
+        ) : (
+          reminderInboxTasks.map((task) => (
+            <div key={task.id} className={`smart-item ${task.reminderStatus}`}>
+              <div className="smart-item-main">
+                <strong>{task.title}</strong>
+                <span>
+                  {task.reminderStatus === "snoozed"
+                    ? `${text.snoozedUntil} ${formatReminderTime(task.snoozedUntil)}`
+                    : `${task.reminderStatus} - ${task.reminder?.replace("T", " ")}`}
+                </span>
+              </div>
+              <div className="smart-item-actions">
+                <button type="button" onClick={() => startTaskReminder(task)}>Start</button>
+                <button type="button" onClick={() => snoozeTaskReminder(task, 15)}>15 min</button>
+                <button type="button" onClick={() => dismissTaskReminder(task)}>Lukk</button>
+                <button type="button" className="success" onClick={() => completeTaskReminder(task)}>{text.done}</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+
+  const endDayView = (
+    <section className="smart-view">
+      <div className="smart-view-header">
+        <div>
+          <span>Review</span>
+          <h2>{text.endDay}</h2>
+        </div>
+        <button type="button" className="todo-close-btn" onClick={() => setShowEndDayView(false)}>
+          <Icon name="close" size={13} />
+        </button>
+      </div>
+
+      <div className="smart-summary-grid">
+        <div>
+          <span>{text.logged}</span>
+          <strong>{formatTimeShort(todayLoggedSeconds)}</strong>
+        </div>
+        <div>
+          <span>{text.remaining}</span>
+          <strong>{formatTimeShort(countdownSeconds)}</strong>
+        </div>
+      </div>
+
+      <div className="end-day-actions">
+        <button type="button" onClick={() => openManual("", "ticket")}>
+          <Icon name="plus" size={12} />
+          <span>{text.add}</span>
+        </button>
+        <button type="button" onClick={() => handleExportCSV("today")}>
+          <Icon name="export" size={12} />
+          <span>{text.export}</span>
+        </button>
+        <button type="button" className="success" onClick={handleCloseDay}>
+          <Icon name="finish" size={12} />
+          <span>{text.closeDay}</span>
+        </button>
+      </div>
+
+      <div className="end-day-checklist">
+        <div className={activeEntry ? "warning" : "done"}>
+          <Icon name={activeEntry ? "warning" : "check"} size={12} />
+          <span>{activeEntry ? (appLanguage === "en" ? "Active timer needs review" : "Aktiv timer må vurderes") : (appLanguage === "en" ? "No active timer" : "Ingen aktiv timer")}</span>
+        </div>
+        <div className={countdownSeconds > 0 ? "warning" : "done"}>
+          <Icon name={countdownSeconds > 0 ? "warning" : "check"} size={12} />
+          <span>{countdownSeconds > 0 ? `${formatTimeShort(countdownSeconds)} ${appLanguage === "en" ? "remaining" : "mangler"}` : (appLanguage === "en" ? "Daily target reached" : "Dagsmål nådd")}</span>
+        </div>
+        <div className={visibleTodoTasks.length > 0 ? "warning" : "done"}>
+          <Icon name={visibleTodoTasks.length > 0 ? "warning" : "check"} size={12} />
+          <span>{visibleTodoTasks.length > 0 ? `${visibleTodoTasks.length} ${appLanguage === "en" ? "open tasks" : "åpne tasks"}` : (appLanguage === "en" ? "Tasks cleared" : "Tasks ryddet")}</span>
+        </div>
+      </div>
+
+      <div className="smart-list compact">
+        {activeEntry && (
+          <div className="smart-item due">
+            <div className="smart-item-main">
+              <strong>{activeEntry.ticketName}</strong>
+              <span>{text.running} - {formatTime(activeEntry.seconds)}</span>
+            </div>
+            <div className="smart-item-actions">
+              <button type="button" onClick={handlePauseCurrent}>Pause</button>
+              <button type="button" onClick={() => handleFinish(activeEntry.id)}>{text.done}</button>
+            </div>
+          </div>
+        )}
+
+        {visibleTodoTasks.slice(0, 5).map((task) => (
+          <div key={task.id} className="smart-item">
+            <div className="smart-item-main">
+              <strong>{task.title}</strong>
+              <span>{task.priority} {appLanguage === "en" ? "priority" : "prioritet"}</span>
+            </div>
+            <div className="smart-item-actions">
+              <button type="button" onClick={() => startTaskReminder(task)}>Start</button>
+              <button type="button" className="success" onClick={() => completeTaskReminder(task)}>{text.done}</button>
+            </div>
+          </div>
+        ))}
+
+        {!activeEntry && visibleTodoTasks.length === 0 && (
+          <p className="smart-empty">{text.noActiveOrTasks}</p>
+        )}
+      </div>
+    </section>
+  );
+
+  const exportPresetOptions = [
+    { id: "today", label: text.today, detail: `${getExportEntriesForPreset("today").length} entries` },
+    { id: "week", label: text.thisWeek, detail: `${getExportEntriesForPreset("week").length} entries` },
+    { id: "tasks", label: text.tasksOnly, detail: `${getExportEntriesForPreset("tasks").length} entries` },
+    { id: "all", label: text.allActive, detail: `${getExportEntriesForPreset("all").length} entries` },
+  ];
+
+  const exportView = (
+    <section className="smart-view">
+      <div className="smart-view-header">
+        <div>
+          <span>CSV</span>
+          <h2>{text.export}</h2>
+        </div>
+        <button type="button" className="todo-close-btn" onClick={() => setShowExportView(false)}>
+          <Icon name="close" size={13} />
+        </button>
+      </div>
+
+      <div className="export-preset-list">
+        {exportPresetOptions.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            className={exportPreset === preset.id ? "active" : ""}
+            onClick={() => setExportPreset(preset.id)}
+          >
+            <span>{preset.label}</span>
+            <strong>{preset.detail}</strong>
+          </button>
+        ))}
+      </div>
+
+      <div className="export-actions">
+        <button type="button" className="success" onClick={() => handleExportCSV(exportPreset)}>
+          <Icon name="export" size={12} />
+          <span>{text.export}</span>
+        </button>
+        <button type="button" onClick={() => handleCopyJiraFormat(exportPreset)}>
+          <Icon name="check" size={12} />
+          <span>{text.copyJira}</span>
+        </button>
+      </div>
+
+      <div className="export-preview">
+        <span>{text.preview}</span>
+        {getExportPreviewLines(exportPreset).length ? (
+          getExportPreviewLines(exportPreset).map((line) => (
+            <code key={line}>{line}</code>
+          ))
+        ) : (
+          <p>{text.noEntriesPreset}</p>
+        )}
+      </div>
+    </section>
+  );
+
   const missingTimeView = (
     <section className="missing-time-view">
       <div className="missing-time-header">
@@ -2508,7 +3107,7 @@ PROJ-456;2026-05-11;2t`}</pre>
     <section className="todo-panel">
       <div className="todo-panel-header">
         <div>
-          <h2>{todoView === "new" ? "Ny task" : "To-do"}</h2>
+          <h2>{todoView === "new" ? (appLanguage === "en" ? "New task" : "Ny task") : text.tasks}</h2>
           <span>{activeTodoCount} active</span>
         </div>
 
@@ -2528,7 +3127,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               className="todo-back-btn"
               onClick={() => setTodoView("list")}
             >
-              Tasks
+              {text.back}
             </button>
           )}
 
@@ -2613,7 +3212,26 @@ PROJ-456;2026-05-11;2t`}</pre>
       </form>
       ) : (
 
-      <div className="todo-list">
+      <>
+        <div className="todo-filter-tabs" role="group" aria-label="Task filter">
+          {[
+            ["all", text.all],
+            ["today", text.today],
+            ["overdue", text.overdue],
+            ["none", text.noReminder],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={todoFilter === value ? "active" : ""}
+              onClick={() => setTodoFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="todo-list">
           {visibleTodoTasks.length === 0 ? (
             <div className="todo-empty-state">
               <p>Ingen tasks enda</p>
@@ -2626,6 +3244,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             visibleTodoTasks.map((task) => {
               const timerEntry = getTodoTimerEntry(task.id);
               const isTaskTimerRunning = timerEntry?.id === activeEntryId;
+              const reminderStatus = getTodoReminderDayStatus(task);
 
               return (
               <div key={task.id} className={`todo-item ${timerEntry ? "timed" : ""}`}>
@@ -2640,10 +3259,18 @@ PROJ-456;2026-05-11;2t`}</pre>
               <div className="todo-item-main">
                 <strong>{task.title}</strong>
                 <div className="todo-item-meta">
-                  {task.sourceTicket && <span>Fra ticket</span>}
-                  <span>{task.priority}</span>
-                  {task.reminder && <span>{task.reminder.replace("T", " ")}</span>}
-                  {timerEntry && <span>{formatTime(timerEntry.seconds)}</span>}
+                  {task.sourceTicket && <span className="todo-chip source">Fra ticket</span>}
+                  <span className={`todo-chip priority ${task.priority}`}>{task.priority}</span>
+                  <span className={`todo-chip reminder ${reminderStatus}`}>
+                    {reminderStatus === "none"
+                      ? text.noReminder
+                      : reminderStatus === "overdue"
+                        ? text.overdue
+                      : reminderStatus === "today"
+                          ? `${text.today} ${formatReminderTime(task.reminder)}`
+                          : task.reminder.replace("T", " ")}
+                  </span>
+                  {timerEntry && <span className="todo-chip timed">{formatTime(timerEntry.seconds)}</span>}
                 </div>
                 {task.notes && <p className="todo-item-notes">{task.notes}</p>}
               </div>
@@ -2670,7 +3297,8 @@ PROJ-456;2026-05-11;2t`}</pre>
               );
             })
         )}
-      </div>
+        </div>
+      </>
       )}
     </section>
   );
@@ -2995,7 +3623,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               <PillMenu
                 onManual={() => openManual(selectedTicket || "")}
                 onMiniMode={() => setIsMiniMode(false)}
-                onExport={handleExportCSV}
+                onExport={openExportView}
                 onImportTickets={openImportGuide}
                 onClearLogs={handleClearLoggedTickets}
                 onTrash={handleClearAll}
@@ -3003,6 +3631,10 @@ PROJ-456;2026-05-11;2t`}</pre>
                 onMissingTime={openMissingTimeView}
                 onReports={openReportsView}
                 onSettings={openSettingsView}
+                onReminderInbox={openReminderInbox}
+                onEndDay={openEndDayView}
+                reminderBadge={dueReminderCount}
+                language={appLanguage}
                 size="normal"
               />
             </div>
@@ -3115,7 +3747,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             <PillMenu
               onManual={() => openManual(selectedTicket || "")}
               onMiniMode={() => setIsMiniMode(true)}
-              onExport={handleExportCSV}
+              onExport={openExportView}
               onImportTickets={openImportGuide}
               onClearLogs={handleClearLoggedTickets}
               onTrash={handleClearAll}
@@ -3123,6 +3755,10 @@ PROJ-456;2026-05-11;2t`}</pre>
               onMissingTime={openMissingTimeView}
               onReports={openReportsView}
               onSettings={openSettingsView}
+              onReminderInbox={openReminderInbox}
+              onEndDay={openEndDayView}
+              reminderBadge={dueReminderCount}
+              language={appLanguage}
               size="normal"
             />
             <div style={{ width: '1px', height: '14px', background: 'rgba(255,255,255,0.12)', margin: '0 2px' }} />
@@ -3264,7 +3900,13 @@ PROJ-456;2026-05-11;2t`}</pre>
               )}
             </p>
           )}
-          {showTrashView ? (
+          {showReminderInbox ? (
+            reminderInboxView
+          ) : showEndDayView ? (
+            endDayView
+          ) : showExportView ? (
+            exportView
+          ) : showTrashView ? (
             trashView
           ) : showMissingTimeView ? (
             missingTimeView
@@ -3282,6 +3924,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               trashRetentionDays={trashRetentionDays}
               themePreset={themePreset}
               themeAccentColor={themeAccentColor}
+              appLanguage={appLanguage}
               accentColors={ACCENT_COLORS}
               onClose={() => setShowSettingsView(false)}
               onSave={handleSaveSettings}
@@ -3306,9 +3949,48 @@ PROJ-456;2026-05-11;2t`}</pre>
 
           {!showManualModal && !editingEntryId && (
             <>
+              <section className="section quick-capture-card">
+                <div className="quick-capture-toggle" role="group" aria-label="Quick capture type">
+                  <button
+                    type="button"
+                    className={quickCaptureType === "task" ? "active" : ""}
+                    onClick={() => setQuickCaptureType("task")}
+                  >
+                    Task
+                  </button>
+                  <button
+                    type="button"
+                    className={quickCaptureType === "ticket" ? "active" : ""}
+                    onClick={() => setQuickCaptureType("ticket")}
+                  >
+                    Ticket
+                  </button>
+                </div>
+
+                <form
+                  className="quick-capture-form"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    handleQuickCaptureSubmit();
+                  }}
+                >
+                  <input
+                    ref={quickCaptureRef}
+                    type="text"
+                    value={quickCaptureText}
+                    onChange={(event) => setQuickCaptureText(event.target.value)}
+                    placeholder={quickCaptureType === "task" ? text.newTaskPlaceholder : text.startTicketPlaceholder}
+                  />
+                  <button type="submit">
+                    <Icon name={quickCaptureType === "task" ? "plus" : "play"} size={12} />
+                    <span>{quickCaptureType === "task" ? text.addTask : "Start"}</span>
+                  </button>
+                </form>
+              </section>
+
               <section className="section remaining-card">
                 <div className="remaining-copy">
-                  <div className="countdown-label">Remaining today</div>
+                  <div className="countdown-label">{text.remainingToday}</div>
                   <div className={`countdown-timer ${countdownPulse ? "pulse" : ""}`}>
                     {formatTime(countdownSeconds)}
                   </div>
@@ -3328,12 +4010,12 @@ PROJ-456;2026-05-11;2t`}</pre>
 
               <section className={`section active-ticket-card ${activeEntry ? "running" : ""}`}>
                 <div className="active-ticket-header">
-                  <span className="active-ticket-kicker">Active ticket</span>
+                  <span className="active-ticket-kicker">{text.activeTicket}</span>
                   <button
                     type="button"
                     className="active-ticket-edit"
                     onClick={() => mainSearchRef.current?.focus()}
-                    title="Switch ticket"
+                    title={text.switchTicket}
                   >
                     <Icon name="edit" size={12} />
                   </button>
@@ -3341,8 +4023,8 @@ PROJ-456;2026-05-11;2t`}</pre>
 
                 <div className="active-ticket-body">
                   <div className="active-ticket-main">
-                    <strong>{activeEntry?.ticketName || "No active ticket"}</strong>
-                    <span>{activeEntry ? "Running since last start" : "Start or select a ticket below"}</span>
+                    <strong>{activeEntry?.ticketName || text.noActiveTicket}</strong>
+                    <span>{activeEntry ? text.running : text.startOrSelect}</span>
                   </div>
 
                   <div className="active-ticket-time">
@@ -3353,7 +4035,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                 <div className="active-ticket-actions">
                   <button type="button" onClick={() => mainSearchRef.current?.focus()}>
                     <Icon name="switch" size={12} />
-                    <span>Switch</span>
+                    <span>{text.switchTicket}</span>
                   </button>
                   <button type="button" onClick={handlePauseCurrent} disabled={!activeEntry}>
                     <Icon name="pause" size={12} />
@@ -3366,10 +4048,32 @@ PROJ-456;2026-05-11;2t`}</pre>
                     disabled={!activeEntry}
                   >
                     <Icon name="square" size={12} />
-                    <span>Stop</span>
+                    <span>{text.done}</span>
                   </button>
                 </div>
               </section>
+
+              {longRunningEntry && (
+                <section className="section timer-correction-card">
+                  <div>
+                    <span>{text.longTimer}</span>
+                    <strong>{longRunningEntry.ticketName}</strong>
+                    <p>{formatTimeShort(longRunningEntry.seconds)} {text.loggedWord}. {text.isThisRight}</p>
+                  </div>
+
+                  <div className="timer-correction-actions">
+                    <button type="button" onClick={() => setDismissedLongTimerId(longRunningEntry.id)}>
+                      {text.looksRight}
+                    </button>
+                    <button type="button" onClick={() => openEditEntry(longRunningEntry)}>
+                      {text.adjust}
+                    </button>
+                    <button type="button" className="danger" onClick={handlePauseCurrent}>
+                      Pause
+                    </button>
+                  </div>
+                </section>
+              )}
 
               <section className="section ticket-controls">
                 <div className="search-row search-row-with-icon">
@@ -3442,17 +4146,18 @@ PROJ-456;2026-05-11;2t`}</pre>
               >
                 <span className="tasks-card-icon">
                   <Icon name="todo" size={14} />
+                  {dueReminderCount > 0 && <span className="tasks-card-badge">{dueReminderCount}</span>}
                 </span>
                 <span className="tasks-card-copy">
                   <strong>Tasks</strong>
                   <span>
                     {activeTodoCount > 0
-                      ? `${activeTodoCount} active${activeReminderTask ? ` - next ${formatReminderTime(activeReminderTask.reminder)}` : ""}`
-                      : "No active tasks"}
+                      ? `${activeTodoCount} ${text.active}${activeReminderTask ? ` - ${text.dueNow.toLowerCase()} ${formatReminderTime(activeReminderTask.reminder)}` : ""}`
+                      : text.noneActiveTasks}
                   </span>
                 </span>
                 <span className="tasks-card-action">
-                  {showTodoPanel ? "Hide" : "Open"}
+                  {showTodoPanel ? text.hide : text.open}
                 </span>
               </button>
             </>
@@ -3548,7 +4253,7 @@ PROJ-456;2026-05-11;2t`}</pre>
 
           <section className="section logged-section">
             <div className="logged-header">
-              <h2>Logged time</h2>
+              <h2>{text.loggedTime}</h2>
               <span>
                 Today {formatTimeShort(todayLoggedSeconds)}
               </span>

@@ -80,6 +80,68 @@ npm run dist
 
 Installer og andre release-filer havner i `release/`.
 
+## Jira-integrasjon
+
+Desktop-appen kan kobles til Jira Cloud for å hente tickets og synkronisere ferdige time entries som worklogs i Jira. Jira-funksjonene virker bare i Electron-appen, ikke i ren webvisning på `localhost`, fordi sikker lagring og Jira-kall kjøres i Electron main process.
+
+I Innstillinger legger brukeren inn:
+
+- Jira base URL, for eksempel `https://firma.atlassian.net`
+- Jira e-post
+- Jira API token
+
+Tilgjengelige Jira-funksjoner:
+
+- `Save Jira`: lagrer Jira URL, e-post og API token sikkert.
+- `Test connection`: tester innloggingen mot Jira.
+- `Load projects`: henter Jira-prosjekter brukeren har tilgang til.
+- Prosjektfilter: velg ett eller flere prosjekter, for eksempel `ADP`, `ITSM` eller `KAN`.
+- `Ticket filter`: valgfritt filter på Jira summary. La feltet stå tomt for å hente nyeste tickets fra valgte prosjekter.
+- `Fetch tickets`: henter Jira tickets og legger dem inn i appens lokale ticketsøk.
+- Forsidesøk: hentede Jira tickets kan søkes opp på issue key eller tittel.
+- Manuell logging: ticketfeltet viser forslag fra hentede Jira tickets.
+- `Sync Jira`: synkroniserer ferdige, usynkede ticket entries som Jira worklogs.
+
+Anbefalt bruk:
+
+1. Legg inn Jira base URL, e-post og API token i Innstillinger.
+2. Trykk `Save Jira`.
+3. Trykk `Test connection` for å kontrollere at Jira-innloggingen virker.
+4. Trykk `Load projects`.
+5. Velg relevante prosjekter.
+6. Tøm `Ticket filter` hvis alle nyeste tickets skal hentes.
+7. Trykk `Fetch tickets`.
+8. Søk opp en Jira ticket på forsiden eller i manuell logging.
+9. Logg tid.
+10. Trykk `Sync Jira` når ferdige entries skal sendes til Jira.
+
+Worklog-synk fungerer slik:
+
+- Appen sender worklog til Jira issue key, for eksempel `KAN-8`.
+- Worklog-kommentaren inkluderer appens ticketvisning, for eksempel `Logged from Time Logger: KAN-8 - SSO`.
+- Manuelle entries med dagens dato synkes med dagens klokkeslett.
+- Manuelle entries med tidligere dato synkes på valgt dato kl. `09:00`.
+- Datoen i appen er styrende for hvilken dato workloggen havner på i Jira.
+- Entries som allerede er synket til Jira blir hoppet over.
+
+## Jira og sikker lagring
+
+API-tokenet lagres ikke i React-state permanent, `localStorage` eller README-konfig. Når brukeren trykker lagre, sendes tokenet én gang fra React via preload til Electron main process. Der blir det kryptert med Electron `safeStorage` og lagret i en lokal `secure-store.json` under Electron sin `userData`-mappe.
+
+Sikkerhetsmekanismene er:
+
+- `nodeIntegration` er slått av og `contextIsolation` er slått på i Electron-vinduet.
+- React får bare tilgang til et begrenset API gjennom `window.loggerAPI` i preload.
+- Jira-tokenet kan lagres og brukes av main process, men hentes aldri tilbake til renderer.
+- UI-et viser bare om et Jira API token finnes, ikke selve tokenet.
+- Jira-kallene `jira:test-connection`, `jira:list-projects`, `jira:fetch-tickets` og `jira:sync-worklogs` kjøres i main process.
+- React sender bare prosjektvalg, søketekst eller entries til main process.
+- Jira-resultater returneres som normalisert app-data, for eksempel `{ id, title, favorite }`.
+- Den generiske secure store-listen som React kan lese inneholder ikke `jiraApiToken`.
+- `secure-store.json` skrives atomisk via temp-fil og rename for å redusere risikoen for korrupt JSON.
+- Hvis secure store-filen likevel er korrupt, tar appen backup og starter med en tom secure store.
+- Synkroniserte entries merkes med `jiraWorklogId`, `jiraWorklogSelf` og `jiraSyncedAt`, slik at samme entry ikke synkes flere ganger.
+
 ## Vanlige problemer
 
 Hvis `npm` eller `node` ikke finnes, installer Node.js LTS og åpne et nytt PowerShell-vindu.

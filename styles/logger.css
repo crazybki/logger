@@ -2034,6 +2034,193 @@ body {
     cursor: not-allowed;
 }
 
+.jira-settings-grid {
+    display: grid;
+    gap: 8px;
+}
+
+.jira-status-row {
+    align-items: center;
+    color: var(--theme-muted);
+    display: flex;
+    font-size: 11px;
+    justify-content: space-between;
+}
+
+.jira-token-status {
+    color: #c47f7a;
+    font-weight: 800;
+}
+
+.jira-token-status.saved {
+    color: var(--theme-green);
+}
+
+.jira-help-box {
+    background: rgba(74, 158, 255, 0.08);
+    border: 1px solid rgba(74, 158, 255, 0.18);
+    border-radius: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px;
+}
+
+.jira-help-box strong {
+    color: var(--theme-text);
+    font-size: 11px;
+    font-weight: 900;
+}
+
+.jira-help-box span {
+    color: var(--theme-muted);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.jira-feedback {
+    background: rgba(76, 175, 80, 0.1);
+    border: 1px solid rgba(76, 175, 80, 0.2);
+    border-radius: 7px;
+    color: #8ddc9a;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1.35;
+    padding: 8px 9px;
+}
+
+.jira-actions {
+    display: grid;
+    gap: 7px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.jira-actions button {
+    background: var(--theme-purple-soft);
+    border: 1px solid var(--theme-border);
+    border-radius: 6px;
+    color: var(--theme-text);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 900;
+    height: 32px;
+    padding: 0 8px;
+}
+
+.jira-actions button.danger {
+    color: #e09992;
+}
+
+.jira-actions button:disabled {
+    color: #667;
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+.jira-ticket-tools {
+    border-top: 1px solid var(--theme-border);
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding-top: 11px;
+}
+
+.jira-project-toolbar {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+}
+
+.jira-project-toolbar button,
+.jira-fetch-tickets {
+    background: var(--theme-purple-soft);
+    border: 1px solid var(--theme-border);
+    border-radius: 6px;
+    color: var(--theme-text);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 900;
+    height: 32px;
+    padding: 0 9px;
+}
+
+.jira-project-toolbar span {
+    color: var(--theme-muted);
+    font-size: 11px;
+}
+
+.jira-project-list {
+    display: grid;
+    gap: 6px;
+    max-height: 150px;
+    overflow: auto;
+}
+
+.jira-project-list p {
+    color: var(--theme-muted);
+    font-size: 11px;
+    margin: 0;
+}
+
+.jira-project-list label {
+    align-items: center;
+    background: var(--theme-field);
+    border: 1px solid var(--theme-field-border);
+    border-radius: 7px;
+    cursor: pointer;
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px;
+}
+
+.jira-project-list label.selected {
+    border-color: var(--theme-border-strong);
+}
+
+.jira-project-list input {
+    flex-shrink: 0;
+}
+
+.jira-project-list label span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.jira-project-list strong {
+    color: var(--theme-text);
+    font-size: 11px;
+}
+
+.jira-project-list small {
+    color: var(--theme-muted);
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.jira-fetch-tickets {
+    width: 100%;
+}
+
+.jira-filter-help {
+    color: var(--theme-muted);
+    font-size: 10.5px;
+    line-height: 1.35;
+    margin-top: -4px;
+}
+
+.jira-project-toolbar button:disabled,
+.jira-fetch-tickets:disabled {
+    color: #667;
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
 .reports-toolbar {
     display: flex;
     justify-content: flex-start;
@@ -3171,6 +3358,12 @@ body {
     font-size: 10px;
 }
 
+.entry-jira-sync {
+    color: #5da070;
+    font-size: 10px;
+    font-weight: 800;
+}
+
 .entry-item.running .entry-date {
     color: #3a5a3a;
     font-size: 10.5px;
@@ -3828,6 +4021,50 @@ html {
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+.manual-ticket-suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    list-style: none;
+    margin: -6px 0 2px;
+    max-height: 150px;
+    overflow: auto;
+    padding: 0;
+}
+
+.manual-ticket-suggestions button {
+    align-items: center;
+    background: var(--theme-field);
+    border: 1px solid var(--theme-field-border);
+    border-radius: 7px;
+    color: var(--theme-text);
+    cursor: pointer;
+    display: flex;
+    gap: 7px;
+    min-height: 30px;
+    padding: 6px 8px;
+    text-align: left;
+    width: 100%;
+}
+
+.manual-ticket-suggestions button:hover {
+    border-color: var(--theme-border-strong);
+}
+
+.manual-ticket-suggestions strong {
+    color: #b9d8ff;
+    flex-shrink: 0;
+    font-size: 11px;
+}
+
+.manual-ticket-suggestions span {
+    color: var(--theme-muted);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .modal-header {

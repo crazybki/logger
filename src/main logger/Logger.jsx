@@ -191,6 +191,12 @@ function Logger() {
       return "no";
     }
   });
+  const [jiraStatus, setJiraStatus] = useState({
+    jiraBaseUrl: "",
+    jiraEmail: "",
+    hasJiraApiToken: false,
+  });
+  const [isJiraBusy, setIsJiraBusy] = useState(false);
   const [miniTicket, setMiniTicket] = useState("");
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [storagePercent, setStoragePercent] = useState(100);
@@ -338,6 +344,7 @@ function Logger() {
       entry.status === "done" &&
       entry.source !== "todo" &&
       !entry.todoTaskId &&
+      !entry.jiraWorklogId &&
       String(entry.ticketName ?? "").trim()
     );
   }
@@ -385,6 +392,17 @@ function Logger() {
   const activeEntries = useMemo(() => {
     return entries.filter((entry) => !entry.deletedAt);
   }, [entries]);
+
+  const pendingJiraWorklogEntries = useMemo(() => {
+    return activeEntries.filter((entry) =>
+      entry.status === "done" &&
+      entry.source !== "todo" &&
+      !entry.todoTaskId &&
+      !entry.jiraWorklogId &&
+      String(entry.ticketName ?? "").trim() &&
+      Number(entry.seconds) > 0
+    );
+  }, [activeEntries]);
 
   const todayDateKey = useMemo(() => {
     return getDateKeyFromDate(new Date(nowTick));
@@ -716,6 +734,29 @@ function Logger() {
     }
 
     loadSecureStore();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadJiraStatus() {
+      if (!window.loggerAPI?.jiraGetStatus) return;
+
+      const result = await window.loggerAPI.jiraGetStatus();
+      if (cancelled || !result?.ok) return;
+
+      setJiraStatus({
+        jiraBaseUrl: result.values?.jiraBaseUrl || "",
+        jiraEmail: result.values?.jiraEmail || "",
+        hasJiraApiToken: Boolean(result.values?.hasJiraApiToken),
+      });
+    }
+
+    loadJiraStatus();
 
     return () => {
       cancelled = true;
@@ -2102,6 +2143,150 @@ function Logger() {
     setShowSettingsView(false);
     setMessageTone("success");
     setMessage(nextSettings.appLanguage === "en" ? "Settings saved" : "Innstillinger lagret");
+  }
+
+  async function handleSaveJiraCredentials(credentials) {
+    if (!window.loggerAPI?.jiraSaveCredentials) {
+      setMessage("Jira storage is not available");
+      return;
+    }
+
+    setIsJiraBusy(true);
+
+    try {
+      const result = await window.loggerAPI.jiraSaveCredentials(credentials);
+
+      if (!result?.ok) {
+        setMessage(result?.error || "Could not save Jira credentials");
+        return;
+      }
+
+      setJiraStatus({
+        jiraBaseUrl: result.values?.jiraBaseUrl || "",
+        jiraEmail: result.values?.jiraEmail || "",
+        hasJiraApiToken: Boolean(result.values?.hasJiraApiToken),
+      });
+      setMessageTone("success");
+      setMessage("Jira credentials saved");
+    } catch (error) {
+      console.error("Could not save Jira credentials:", error);
+      setMessage("Could not save Jira credentials");
+    } finally {
+      setIsJiraBusy(false);
+    }
+  }
+
+  async function handleTestJiraConnection() {
+    if (!window.loggerAPI?.jiraTestConnection) {
+      setMessage("Jira test is not available");
+      return;
+    }
+
+    setIsJiraBusy(true);
+
+    try {
+      const result = await window.loggerAPI.jiraTestConnection();
+
+      if (!result?.success) {
+        setMessage(result?.error || "Jira connection failed");
+        return;
+      }
+
+      setMessageTone("success");
+      setMessage(`Connected to Jira as ${result.user?.displayName || result.user?.emailAddress || "user"}`);
+    } catch (error) {
+      console.error("Could not test Jira connection:", error);
+      setMessage("Could not test Jira connection");
+    } finally {
+      setIsJiraBusy(false);
+    }
+  }
+
+  async function handleClearJiraCredentials() {
+    if (!window.loggerAPI?.jiraClearCredentials) {
+      setMessage("Jira storage is not available");
+      return;
+    }
+
+    setIsJiraBusy(true);
+
+    try {
+      const result = await window.loggerAPI.jiraClearCredentials();
+
+      if (!result?.ok) {
+        setMessage(result?.error || "Could not clear Jira credentials");
+        return;
+      }
+
+      setJiraStatus({
+        jiraBaseUrl: "",
+        jiraEmail: "",
+        hasJiraApiToken: false,
+      });
+      setMessageTone("success");
+      setMessage("Jira credentials cleared");
+    } catch (error) {
+      console.error("Could not clear Jira credentials:", error);
+      setMessage("Could not clear Jira credentials");
+    } finally {
+      setIsJiraBusy(false);
+    }
+  }
+
+  async function handleSyncJiraWorklogs() {
+    if (!window.loggerAPI?.jiraSyncWorklogs) {
+      setMessage("Jira sync is not available");
+      return;
+    }
+
+    if (!pendingJiraWorklogEntries.length) {
+      setMessage("No Jira worklogs to sync");
+      return;
+    }
+
+    setIsJiraBusy(true);
+
+    try {
+      const result = await window.loggerAPI.jiraSyncWorklogs(pendingJiraWorklogEntries);
+      const results = Array.isArray(result?.results) ? result.results : [];
+      const successfulResults = results.filter((item) => item.success && item.worklog?.id);
+      const syncedAt = new Date().toISOString();
+
+      if (successfulResults.length) {
+        const resultByEntryId = new Map(successfulResults.map((item) => [item.entryId, item]));
+
+        setEntries((prev) =>
+          prev.map((entry) => {
+            const syncedResult = resultByEntryId.get(entry.id);
+            if (!syncedResult) return entry;
+
+            return {
+              ...entry,
+              jiraWorklogId: syncedResult.worklog.id,
+              jiraWorklogSelf: syncedResult.worklog.self,
+              jiraSyncedAt: syncedAt,
+            };
+          })
+        );
+      }
+
+      const failedCount = results.filter((item) => !item.success).length;
+
+      if (!result?.ok || failedCount) {
+        setMessage(
+          `Synced ${successfulResults.length} Jira worklogs${failedCount ? `, ${failedCount} failed` : ""}`
+        );
+        return;
+      }
+
+      setMessageTone("success");
+      setMessage(`Synced ${successfulResults.length} Jira worklogs`);
+    } catch (error) {
+      console.error("Could not sync Jira worklogs:", error);
+      setMessage("Could not sync Jira worklogs");
+    } finally {
+      setIsJiraBusy(false);
+    }
   }
 
   function handleSaveManualEntry() {
@@ -3926,8 +4111,15 @@ PROJ-456;2026-05-11;2t`}</pre>
               themeAccentColor={themeAccentColor}
               appLanguage={appLanguage}
               accentColors={ACCENT_COLORS}
+              jiraStatus={jiraStatus}
+              isJiraBusy={isJiraBusy}
+              pendingJiraSyncCount={pendingJiraWorklogEntries.length}
               onClose={() => setShowSettingsView(false)}
               onSave={handleSaveSettings}
+              onSaveJiraCredentials={handleSaveJiraCredentials}
+              onTestJiraConnection={handleTestJiraConnection}
+              onClearJiraCredentials={handleClearJiraCredentials}
+              onSyncJiraWorklogs={handleSyncJiraWorklogs}
             />
           ) : (
             <div className="home-view">
@@ -4368,6 +4560,12 @@ PROJ-456;2026-05-11;2t`}</pre>
                               </span>
                               <span className="entry-meta-separator">-</span>
                               <span className="entry-date">{formatDateShort(entry.createdAt)}</span>
+                              {entry.jiraWorklogId && (
+                                <>
+                                  <span className="entry-meta-separator">-</span>
+                                  <span className="entry-jira-sync">Jira synced</span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </li>

@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld("loggerAPI", {
   secureStoreGetAll: (keys) => ipcRenderer.invoke("secure-store:get-all", keys),
   secureStoreSet: (key, value) => ipcRenderer.invoke("secure-store:set", key, value),
   secureStoreDelete: (key) => ipcRenderer.invoke("secure-store:delete", key),
+  jiraGetStatus: () => ipcRenderer.invoke("jira-secure-store:get"),
+  jiraSaveCredentials: (credentials) => ipcRenderer.invoke("jira-secure-store:set", credentials),
+  jiraClearCredentials: () => ipcRenderer.invoke("jira-secure-store:delete"),
+  jiraTestConnection: () => ipcRenderer.invoke("jira:test-connection"),
+  jiraSyncWorklogs: (entries) => ipcRenderer.invoke("jira:sync-worklogs", entries),
 
   setMiniMode: (isMini) => ipcRenderer.send("window:set-mini-mode", isMini),
   minimizeWindow: () => ipcRenderer.send("window:minimize"),

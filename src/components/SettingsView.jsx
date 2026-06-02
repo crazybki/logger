@@ -18,8 +18,15 @@ export function SettingsView({
   themeAccentColor,
   appLanguage = "no",
   accentColors,
+  jiraStatus = {},
+  isJiraBusy = false,
+  pendingJiraSyncCount = 0,
   onClose,
   onSave,
+  onSaveJiraCredentials,
+  onTestJiraConnection,
+  onClearJiraCredentials,
+  onSyncJiraWorklogs,
 }) {
   const text = appLanguage === "en"
     ? {
@@ -44,6 +51,21 @@ export function SettingsView({
         default: "Default",
         cancel: "Cancel",
         save: "Save settings",
+        jira: "Jira",
+        jiraHelp: "Store credentials securely and sync completed time entries as Jira worklogs.",
+        jiraBaseUrl: "Base URL",
+        jiraEmail: "Email",
+        jiraApiToken: "API token",
+        jiraTokenSaved: "API token saved",
+        jiraTokenMissing: "No API token saved",
+        saveJira: "Save Jira",
+        testJira: "Test connection",
+        clearJira: "Clear",
+        syncJira: "Sync worklogs",
+        pendingSync: "Pending",
+        jiraStepsTitle: "How to sync",
+        jiraSteps:
+          "Save your Jira URL, email, and API token. Test the connection, then sync completed ticket entries. Entries already synced are skipped.",
       }
     : {
         settings: "Innstillinger",
@@ -67,6 +89,21 @@ export function SettingsView({
         default: "Standard",
         cancel: "Avbryt",
         save: "Lagre innstillinger",
+        jira: "Jira",
+        jiraHelp: "Lagre innlogging sikkert og synk ferdige time entries som Jira worklogs.",
+        jiraBaseUrl: "Base URL",
+        jiraEmail: "E-post",
+        jiraApiToken: "API token",
+        jiraTokenSaved: "API token lagret",
+        jiraTokenMissing: "Ingen API token lagret",
+        saveJira: "Lagre Jira",
+        testJira: "Test tilkobling",
+        clearJira: "Slett",
+        syncJira: "Synk worklogs",
+        pendingSync: "Venter",
+        jiraStepsTitle: "Slik synker du",
+        jiraSteps:
+          "Lagre Jira URL, e-post og API token. Test tilkoblingen, og synk deretter ferdige ticket entries. Entries som allerede er synket hoppes over.",
       };
   const initialTarget = secondsToParts(dailyTargetSeconds);
   const [targetHours, setTargetHours] = useState(initialTarget.hours);
@@ -75,6 +112,9 @@ export function SettingsView({
   const [selectedThemePreset, setSelectedThemePreset] = useState(themePreset || "default");
   const [selectedAccentColor, setSelectedAccentColor] = useState(themeAccentColor || "");
   const [selectedLanguage, setSelectedLanguage] = useState(appLanguage || "no");
+  const [jiraBaseUrl, setJiraBaseUrl] = useState(jiraStatus.jiraBaseUrl || "");
+  const [jiraEmail, setJiraEmail] = useState(jiraStatus.jiraEmail || "");
+  const [jiraApiToken, setJiraApiToken] = useState("");
 
   useEffect(() => {
     const nextTarget = secondsToParts(dailyTargetSeconds);
@@ -86,9 +126,20 @@ export function SettingsView({
     setSelectedLanguage(appLanguage || "no");
   }, [appLanguage, dailyTargetSeconds, themeAccentColor, themePreset, trashRetentionDays]);
 
+  useEffect(() => {
+    setJiraBaseUrl(jiraStatus.jiraBaseUrl || "");
+    setJiraEmail(jiraStatus.jiraEmail || "");
+    setJiraApiToken("");
+  }, [jiraStatus.jiraBaseUrl, jiraStatus.jiraEmail, jiraStatus.hasJiraApiToken]);
+
   const nextDailyTargetSeconds =
     (Number(targetHours) || 0) * 3600 + (Number(targetMinutes) || 0) * 60;
   const canSave = nextDailyTargetSeconds > 0 && Number(retentionDays) > 0;
+  const canSaveJira =
+    Boolean(jiraBaseUrl.trim() && jiraEmail.trim()) &&
+    (Boolean(jiraApiToken.trim()) || Boolean(jiraStatus.hasJiraApiToken));
+  const canTestJira = Boolean(jiraStatus.jiraBaseUrl && jiraStatus.jiraEmail && jiraStatus.hasJiraApiToken);
+  const canSyncJira = canTestJira && pendingJiraSyncCount > 0;
 
   function handleSave(event) {
     event.preventDefault();
@@ -107,6 +158,22 @@ export function SettingsView({
     const parts = secondsToParts(DEFAULT_DAILY_TARGET_SECONDS);
     setTargetHours(parts.hours);
     setTargetMinutes(parts.minutes);
+  }
+
+  function handleSaveJira() {
+    if (!canSaveJira || !onSaveJiraCredentials) return;
+
+    const credentials = {
+      jiraBaseUrl: jiraBaseUrl.trim(),
+      jiraEmail: jiraEmail.trim(),
+    };
+
+    if (jiraApiToken.trim()) {
+      credentials.jiraApiToken = jiraApiToken.trim();
+    }
+
+    onSaveJiraCredentials(credentials);
+    setJiraApiToken("");
   }
 
   return (
@@ -259,6 +326,74 @@ export function SettingsView({
               onClick={() => setSelectedAccentColor("")}
             >
               {text.default}
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-card jira-settings-card">
+          <div className="settings-card-copy">
+            <strong>{text.jira}</strong>
+            <span>{text.jiraHelp}</span>
+          </div>
+
+          <div className="jira-settings-grid">
+            <label className="settings-single-input">
+              <span>{text.jiraBaseUrl}</span>
+              <input
+                type="url"
+                placeholder="https://company.atlassian.net"
+                value={jiraBaseUrl}
+                onChange={(event) => setJiraBaseUrl(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+
+            <label className="settings-single-input">
+              <span>{text.jiraEmail}</span>
+              <input
+                type="email"
+                value={jiraEmail}
+                onChange={(event) => setJiraEmail(event.target.value)}
+                autoComplete="username"
+              />
+            </label>
+
+            <label className="settings-single-input">
+              <span>{text.jiraApiToken}</span>
+              <input
+                type="password"
+                value={jiraApiToken}
+                onChange={(event) => setJiraApiToken(event.target.value)}
+                autoComplete="new-password"
+                placeholder={jiraStatus.hasJiraApiToken ? text.jiraTokenSaved : ""}
+              />
+            </label>
+          </div>
+
+          <div className="jira-status-row">
+            <span className={jiraStatus.hasJiraApiToken ? "jira-token-status saved" : "jira-token-status"}>
+              {jiraStatus.hasJiraApiToken ? text.jiraTokenSaved : text.jiraTokenMissing}
+            </span>
+            <span>{text.pendingSync}: {pendingJiraSyncCount}</span>
+          </div>
+
+          <div className="jira-help-box">
+            <strong>{text.jiraStepsTitle}</strong>
+            <span>{text.jiraSteps}</span>
+          </div>
+
+          <div className="jira-actions">
+            <button type="button" onClick={handleSaveJira} disabled={!canSaveJira || isJiraBusy}>
+              {text.saveJira}
+            </button>
+            <button type="button" onClick={onTestJiraConnection} disabled={!canTestJira || isJiraBusy}>
+              {text.testJira}
+            </button>
+            <button type="button" onClick={onSyncJiraWorklogs} disabled={!canSyncJira || isJiraBusy}>
+              {text.syncJira}
+            </button>
+            <button type="button" className="danger" onClick={onClearJiraCredentials} disabled={isJiraBusy}>
+              {text.clearJira}
             </button>
           </div>
         </div>

@@ -2034,6 +2034,78 @@ body {
     cursor: not-allowed;
 }
 
+.jira-settings-grid {
+    display: grid;
+    gap: 8px;
+}
+
+.jira-status-row {
+    align-items: center;
+    color: var(--theme-muted);
+    display: flex;
+    font-size: 11px;
+    justify-content: space-between;
+}
+
+.jira-token-status {
+    color: #c47f7a;
+    font-weight: 800;
+}
+
+.jira-token-status.saved {
+    color: var(--theme-green);
+}
+
+.jira-help-box {
+    background: rgba(74, 158, 255, 0.08);
+    border: 1px solid rgba(74, 158, 255, 0.18);
+    border-radius: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px;
+}
+
+.jira-help-box strong {
+    color: var(--theme-text);
+    font-size: 11px;
+    font-weight: 900;
+}
+
+.jira-help-box span {
+    color: var(--theme-muted);
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.jira-actions {
+    display: grid;
+    gap: 7px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.jira-actions button {
+    background: var(--theme-purple-soft);
+    border: 1px solid var(--theme-border);
+    border-radius: 6px;
+    color: var(--theme-text);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 900;
+    height: 32px;
+    padding: 0 8px;
+}
+
+.jira-actions button.danger {
+    color: #e09992;
+}
+
+.jira-actions button:disabled {
+    color: #667;
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
 .reports-toolbar {
     display: flex;
     justify-content: flex-start;
@@ -3169,6 +3241,12 @@ body {
 .entry-date {
     color: #3a3a3a;
     font-size: 10px;
+}
+
+.entry-jira-sync {
+    color: #5da070;
+    font-size: 10px;
+    font-weight: 800;
 }
 
 .entry-item.running .entry-date {

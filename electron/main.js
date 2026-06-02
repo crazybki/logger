@@ -25,6 +25,7 @@ const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_IMPORT_ROWS = 5000;
 const MAX_CELL_LENGTH = 300;
 const MAX_NOTIFICATION_LENGTH = 160;
+const MAX_JIRA_SYNC_ENTRIES = 100;
 const SECURE_STORE_KEYS = new Set([
   "timeEntries",
   "jiraTickets",
@@ -32,6 +33,11 @@ const SECURE_STORE_KEYS = new Set([
   "activeEntryId",
   "countdownResetOffset",
   "countdownResetDate",
+]);
+const JIRA_SECURE_STORE_KEYS = new Set([
+  "jiraBaseUrl",
+  "jiraEmail",
+  "jiraApiToken",
 ]);
 
 if (process.platform === "win32") {
@@ -177,6 +183,12 @@ function assertSecureStoreKey(key) {
   }
 }
 
+function assertJiraSecureStoreKey(key) {
+  if (!JIRA_SECURE_STORE_KEYS.has(key)) {
+    throw new Error("Jira secure store key is not allowed");
+  }
+}
+
 function encryptValue(value) {
   assertSecureStoreAvailable();
   return safeStorage.encryptString(JSON.stringify(value)).toString("base64");
@@ -185,6 +197,184 @@ function encryptValue(value) {
 function decryptValue(encryptedValue) {
   assertSecureStoreAvailable();
   return JSON.parse(safeStorage.decryptString(Buffer.from(encryptedValue, "base64")));
+}
+
+async function getJiraSecureValues() {
+  assertSecureStoreAvailable();
+
+  const store = await readSecureStore();
+  const values = {};
+
+  JIRA_SECURE_STORE_KEYS.forEach((key) => {
+    if (store[key]) {
+      values[key] = decryptValue(store[key]);
+    }
+  });
+
+  return values;
+}
+
+function sanitizeJiraBaseUrl(value) {
+  const trimmedValue = truncateText(value, 300).replace(/\/+$/, "");
+  if (!trimmedValue) return "";
+
+  const parsedUrl = new URL(trimmedValue);
+  if (parsedUrl.protocol !== "https:") {
+    throw new Error("Jira base URL must use HTTPS");
+  }
+
+  return parsedUrl.origin;
+}
+
+function sanitizeJiraEmail(value) {
+  const email = truncateText(value, 300);
+  if (!email) return "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("Jira email is invalid");
+  }
+
+  return email;
+}
+
+function sanitizeJiraApiToken(value) {
+  return truncateText(value, 1000);
+}
+
+function getJiraCredentialsStatus(values) {
+  return {
+    jiraBaseUrl: values.jiraBaseUrl || "",
+    jiraEmail: values.jiraEmail || "",
+    hasJiraApiToken: Boolean(values.jiraApiToken),
+  };
+}
+
+function getJiraAuthHeader(email, apiToken) {
+  return `Basic ${Buffer.from(`${email}:${apiToken}`, "utf8").toString("base64")}`;
+}
+
+function normalizeJiraUserInfo(user = {}) {
+  return {
+    accountId: truncateText(user.accountId, 120),
+    displayName: truncateText(user.displayName, 160),
+    emailAddress: truncateText(user.emailAddress, 300),
+    active: Boolean(user.active),
+  };
+}
+
+function padDatePart(value, size = 2) {
+  return String(value).padStart(size, "0");
+}
+
+function getTimezoneOffsetText(date) {
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = absoluteMinutes % 60;
+
+  return `${sign}${padDatePart(hours)}${padDatePart(minutes)}`;
+}
+
+function formatJiraStarted(value) {
+  const rawValue = truncateText(value, 80);
+  let date;
+
+  const dateOnlyMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    date = new Date(
+      Number(dateOnlyMatch[1]),
+      Number(dateOnlyMatch[2]) - 1,
+      Number(dateOnlyMatch[3]),
+      9,
+      0,
+      0,
+      0
+    );
+  } else {
+    date = rawValue ? new Date(rawValue) : new Date();
+  }
+
+  if (Number.isNaN(date.getTime())) {
+    date = new Date();
+  }
+
+  return [
+    padDatePart(date.getFullYear(), 4),
+    "-",
+    padDatePart(date.getMonth() + 1),
+    "-",
+    padDatePart(date.getDate()),
+    "T",
+    padDatePart(date.getHours()),
+    ":",
+    padDatePart(date.getMinutes()),
+    ":",
+    padDatePart(date.getSeconds()),
+    ".",
+    padDatePart(date.getMilliseconds(), 3),
+    getTimezoneOffsetText(date),
+  ].join("");
+}
+
+function createJiraCommentDocument(text) {
+  return {
+    type: "doc",
+    version: 1,
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: truncateText(text, 300),
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function normalizeJiraWorklogEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    return { valid: false, error: "Invalid entry" };
+  }
+
+  const issueKey = truncateText(entry.ticketName, 80);
+  if (!issueKey) {
+    return { valid: false, id: entry.id ?? null, error: "Entry has no Jira issue key" };
+  }
+
+  const timeSpentSeconds = Math.round(Number(entry.seconds));
+  if (!Number.isFinite(timeSpentSeconds) || timeSpentSeconds <= 0) {
+    return { valid: false, id: entry.id ?? null, issueKey, error: "Entry has no logged time" };
+  }
+
+  if (entry.deletedAt) {
+    return { valid: false, id: entry.id ?? null, issueKey, error: "Entry is deleted" };
+  }
+
+  return {
+    valid: true,
+    id: entry.id ?? null,
+    issueKey,
+    started: formatJiraStarted(entry.createdAt),
+    timeSpentSeconds,
+  };
+}
+
+function normalizeJiraWorklogResult(entry, responseBody = {}) {
+  return {
+    entryId: entry.id,
+    issueKey: entry.issueKey,
+    success: true,
+    worklog: {
+      id: truncateText(responseBody.id, 80),
+      issueId: truncateText(responseBody.issueId, 80),
+      self: truncateText(responseBody.self, 300),
+      started: truncateText(responseBody.started, 80),
+      timeSpentSeconds: Number(responseBody.timeSpentSeconds) || entry.timeSpentSeconds,
+    },
+  };
 }
 
 function createWindow() {
@@ -325,6 +515,213 @@ ipcMain.handle("secure-store:delete", async (_, key) => {
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("jira-secure-store:get", async () => {
+  try {
+    const values = await getJiraSecureValues();
+    return { ok: true, values: getJiraCredentialsStatus(values) };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("jira-secure-store:set", async (_, credentials = {}) => {
+  try {
+    assertSecureStoreAvailable();
+
+    if (!credentials || typeof credentials !== "object") {
+      throw new Error("Invalid Jira credentials");
+    }
+
+    const nextValues = {};
+
+    if (Object.prototype.hasOwnProperty.call(credentials, "jiraBaseUrl")) {
+      nextValues.jiraBaseUrl = sanitizeJiraBaseUrl(credentials.jiraBaseUrl);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(credentials, "jiraEmail")) {
+      nextValues.jiraEmail = sanitizeJiraEmail(credentials.jiraEmail);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(credentials, "jiraApiToken")) {
+      nextValues.jiraApiToken = sanitizeJiraApiToken(credentials.jiraApiToken);
+    }
+
+    Object.keys(nextValues).forEach(assertJiraSecureStoreKey);
+
+    const store = await readSecureStore();
+
+    Object.entries(nextValues).forEach(([key, value]) => {
+      if (value) {
+        store[key] = encryptValue(value);
+      } else {
+        delete store[key];
+      }
+    });
+
+    await writeSecureStore(store);
+
+    const values = await getJiraSecureValues();
+    return { ok: true, values: getJiraCredentialsStatus(values) };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("jira-secure-store:delete", async (_, key) => {
+  try {
+    assertSecureStoreAvailable();
+
+    const keys = key ? [key] : Array.from(JIRA_SECURE_STORE_KEYS);
+    keys.forEach(assertJiraSecureStoreKey);
+
+    const store = await readSecureStore();
+    keys.forEach((storeKey) => {
+      delete store[storeKey];
+    });
+
+    await writeSecureStore(store);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("jira:test-connection", async () => {
+  try {
+    const values = await getJiraSecureValues();
+    const jiraBaseUrl = sanitizeJiraBaseUrl(values.jiraBaseUrl);
+    const jiraEmail = sanitizeJiraEmail(values.jiraEmail);
+    const jiraApiToken = sanitizeJiraApiToken(values.jiraApiToken);
+
+    if (!jiraBaseUrl || !jiraEmail || !jiraApiToken) {
+      throw new Error("Jira credentials are incomplete");
+    }
+
+    const response = await fetch(`${jiraBaseUrl}/rest/api/3/myself`, {
+      method: "GET",
+      headers: {
+        Authorization: getJiraAuthHeader(jiraEmail, jiraApiToken),
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        success: false,
+        error: `Jira connection failed with status ${response.status}`,
+      };
+    }
+
+    const user = await response.json();
+    return {
+      ok: true,
+      success: true,
+      user: normalizeJiraUserInfo(user),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+ipcMain.handle("jira:sync-worklogs", async (_, entries = []) => {
+  try {
+    if (!Array.isArray(entries)) {
+      throw new Error("Invalid Jira worklog entries");
+    }
+
+    const values = await getJiraSecureValues();
+    const jiraBaseUrl = sanitizeJiraBaseUrl(values.jiraBaseUrl);
+    const jiraEmail = sanitizeJiraEmail(values.jiraEmail);
+    const jiraApiToken = sanitizeJiraApiToken(values.jiraApiToken);
+
+    if (!jiraBaseUrl || !jiraEmail || !jiraApiToken) {
+      throw new Error("Jira credentials are incomplete");
+    }
+
+    const authHeader = getJiraAuthHeader(jiraEmail, jiraApiToken);
+    const limitedEntries = entries.slice(0, MAX_JIRA_SYNC_ENTRIES);
+    const results = [];
+
+    for (const originalEntry of limitedEntries) {
+      const entry = normalizeJiraWorklogEntry(originalEntry);
+
+      if (!entry.valid) {
+        results.push({
+          entryId: entry.id ?? null,
+          issueKey: entry.issueKey || "",
+          success: false,
+          error: entry.error,
+        });
+        continue;
+      }
+
+      try {
+        const response = await fetch(
+          `${jiraBaseUrl}/rest/api/3/issue/${encodeURIComponent(entry.issueKey)}/worklog?adjustEstimate=leave`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: authHeader,
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              comment: createJiraCommentDocument("Logged from Time Logger"),
+              started: entry.started,
+              timeSpentSeconds: entry.timeSpentSeconds,
+              properties: [
+                {
+                  key: "timeLoggerEntryId",
+                  value: String(entry.id ?? ""),
+                },
+              ],
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          results.push({
+            entryId: entry.id,
+            issueKey: entry.issueKey,
+            success: false,
+            status: response.status,
+            error: `Jira worklog sync failed with status ${response.status}`,
+          });
+          continue;
+        }
+
+        const responseBody = await response.json();
+        results.push(normalizeJiraWorklogResult(entry, responseBody));
+      } catch (error) {
+        results.push({
+          entryId: entry.id,
+          issueKey: entry.issueKey,
+          success: false,
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      success: results.every((result) => result.success),
+      results,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      success: false,
+      error: error.message,
+      results: [],
+    };
   }
 });
 

@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld("loggerAPI", {
   jiraClearCredentials: () => ipcRenderer.invoke("jira-secure-store:delete"),
   jiraTestConnection: () => ipcRenderer.invoke("jira:test-connection"),
   jiraSyncWorklogs: (entries) => ipcRenderer.invoke("jira:sync-worklogs", entries),
+  jiraListProjects: () => ipcRenderer.invoke("jira:list-projects"),
+  jiraFetchTickets: (options) => ipcRenderer.invoke("jira:fetch-tickets", options),
 
   setMiniMode: (isMini) => ipcRenderer.send("window:set-mini-mode", isMini),
   minimizeWindow: () => ipcRenderer.send("window:minimize"),

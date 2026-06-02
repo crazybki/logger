@@ -26,6 +26,7 @@ const SECURE_STORE_KEYS = [
   "countdownResetOffset",
   "countdownResetDate",
 ];
+const DEMO_TICKET_IDS = new Set(["ABC-123", "ABC-456", "ABC-789", "ABC-321", "ABC-654"]);
 
 const UI_TEXT = {
   no: {
@@ -196,7 +197,19 @@ function Logger() {
     jiraEmail: "",
     hasJiraApiToken: false,
   });
+  const [jiraFeedback, setJiraFeedback] = useState("");
   const [isJiraBusy, setIsJiraBusy] = useState(false);
+  const [isJiraFetchingTickets, setIsJiraFetchingTickets] = useState(false);
+  const [jiraProjects, setJiraProjects] = useState([]);
+  const [selectedJiraProjectKeys, setSelectedJiraProjectKeys] = useState(() => {
+    try {
+      const saved = localStorage.getItem("selectedJiraProjectKeys");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [jiraTicketQuery, setJiraTicketQuery] = useState("");
   const [miniTicket, setMiniTicket] = useState("");
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [storagePercent, setStoragePercent] = useState(100);
@@ -294,15 +307,7 @@ function Logger() {
   const [jiraTickets, setJiraTickets] = useState(() => {
     try {
       const saved = localStorage.getItem("jiraTickets");
-      return saved
-        ? JSON.parse(saved)
-        : [
-          { id: "ABC-123", title: "Fix login bug", favorite: true },
-          { id: "ABC-456", title: "Update dashboard", favorite: true },
-          { id: "ABC-789", title: "Refactor timer logic", favorite: false },
-          { id: "ABC-321", title: "Review customer issue", favorite: false },
-          { id: "ABC-654", title: "Improve export flow", favorite: true },
-        ];
+      return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
@@ -335,6 +340,12 @@ function Logger() {
 
   function getTicketMergeKey(entry) {
     return `${getDateKey(entry)}::${String(entry.ticketName ?? "").trim().toLowerCase()}`;
+  }
+
+  function getJiraIssueKeyFromTicketName(ticketName) {
+    const value = String(ticketName ?? "").trim();
+    const match = value.match(/^([A-Z][A-Z0-9]+-\d+)(?:\s+-\s+.+)?$/i);
+    return match ? match[1].toUpperCase() : value;
   }
 
   function canMergeTicketEntry(entry) {
@@ -394,15 +405,53 @@ function Logger() {
   }, [entries]);
 
   const pendingJiraWorklogEntries = useMemo(() => {
-    return activeEntries.filter((entry) =>
-      entry.status === "done" &&
-      entry.source !== "todo" &&
-      !entry.todoTaskId &&
-      !entry.jiraWorklogId &&
-      String(entry.ticketName ?? "").trim() &&
-      Number(entry.seconds) > 0
+    const ticketById = new Map(
+      jiraTickets.map((ticket) => [String(ticket.id ?? "").trim().toUpperCase(), ticket])
     );
-  }, [activeEntries]);
+    const ticketByTitle = new Map(
+      jiraTickets
+        .filter((ticket) => String(ticket.title ?? "").trim())
+        .map((ticket) => [String(ticket.title ?? "").trim().toLowerCase(), ticket])
+    );
+    const ticketByFullName = new Map(
+      jiraTickets
+        .filter((ticket) => String(ticket.id ?? "").trim())
+        .map((ticket) => [
+          `${String(ticket.id ?? "").trim()} - ${String(ticket.title ?? "").trim()}`.toLowerCase(),
+          ticket,
+        ])
+    );
+
+    return activeEntries
+      .filter((entry) =>
+        entry.status === "done" &&
+        entry.source !== "todo" &&
+        !entry.todoTaskId &&
+        !entry.jiraWorklogId &&
+        String(entry.ticketName ?? "").trim() &&
+        Number(entry.seconds) > 0
+      )
+      .map((entry) => {
+        const entryName = String(entry.ticketName ?? "").trim();
+        const parsedIssueKey = getJiraIssueKeyFromTicketName(entryName);
+        const matchingTicket =
+          ticketById.get(parsedIssueKey) ||
+          ticketByFullName.get(entryName.toLowerCase()) ||
+          ticketByTitle.get(entryName.toLowerCase());
+        const jiraIssueKey = matchingTicket?.id || parsedIssueKey;
+
+        return {
+          ...entry,
+          jiraIssueKey,
+          jiraTicketTitle: matchingTicket?.title || "",
+        };
+      });
+  }, [activeEntries, jiraTickets]);
+
+  const canSyncJiraFromHome =
+    Boolean(jiraStatus.jiraBaseUrl && jiraStatus.jiraEmail && jiraStatus.hasJiraApiToken) &&
+    pendingJiraWorklogEntries.length > 0 &&
+    !isJiraBusy;
 
   const todayDateKey = useMemo(() => {
     return getDateKeyFromDate(new Date(nowTick));
@@ -522,11 +571,37 @@ function Logger() {
     return groups;
   }, [activeEntries]);
 
+  function getMatchingJiraTickets(queryValue) {
+    const query = String(queryValue ?? "").trim().toLowerCase();
+    if (!query) return jiraTickets;
+
+    function scoreTicket(ticket) {
+      const id = String(ticket.id ?? "").toLowerCase();
+      const title = String(ticket.title ?? "").toLowerCase();
+      const combined = `${id} ${title}`;
+
+      if (id === query) return 0;
+      if (id.startsWith(query)) return 1;
+      if (title.startsWith(query)) return 2;
+      if (combined.includes(query)) return 3;
+      return 99;
+    }
+
+    return jiraTickets
+      .map((ticket, index) => ({ ticket, index, score: scoreTicket(ticket) }))
+      .filter((item) => item.score < 99)
+      .sort((a, b) => a.score - b.score || a.index - b.index)
+      .map((item) => item.ticket);
+  }
+
   const filteredTickets = useMemo(() => {
-    return jiraTickets.filter((ticket) =>
-      `${ticket.id} ${ticket.title}`.toLowerCase().includes(search.toLowerCase())
-    );
+    return getMatchingJiraTickets(search);
   }, [search, jiraTickets]);
+
+  const manualTicketSuggestions = useMemo(() => {
+    if (manualEntryType !== "ticket") return [];
+    return getMatchingJiraTickets(manualTicket).slice(0, 5);
+  }, [jiraTickets, manualEntryType, manualTicket]);
 
   const favoriteTickets = useMemo(() => {
     return jiraTickets.filter((ticket) => ticket.favorite);
@@ -780,6 +855,10 @@ function Logger() {
   useEffect(() => {
     localStorage.setItem("appLanguage", appLanguage);
   }, [appLanguage]);
+
+  useEffect(() => {
+    localStorage.setItem("selectedJiraProjectKeys", JSON.stringify(selectedJiraProjectKeys));
+  }, [selectedJiraProjectKeys]);
 
   useEffect(() => {
     localStorage.setItem("exportPreset", exportPreset);
@@ -2148,17 +2227,20 @@ function Logger() {
   async function handleSaveJiraCredentials(credentials) {
     if (!window.loggerAPI?.jiraSaveCredentials) {
       setMessage("Jira storage is not available");
-      return;
+      setJiraFeedback("Jira storage is not available");
+      return false;
     }
 
     setIsJiraBusy(true);
+    setJiraFeedback("Saving Jira credentials...");
 
     try {
       const result = await window.loggerAPI.jiraSaveCredentials(credentials);
 
       if (!result?.ok) {
         setMessage(result?.error || "Could not save Jira credentials");
-        return;
+        setJiraFeedback(result?.error || "Could not save Jira credentials");
+        return false;
       }
 
       setJiraStatus({
@@ -2168,9 +2250,13 @@ function Logger() {
       });
       setMessageTone("success");
       setMessage("Jira credentials saved");
+      setJiraFeedback("Jira credentials saved. You can test the connection now.");
+      return true;
     } catch (error) {
       console.error("Could not save Jira credentials:", error);
       setMessage("Could not save Jira credentials");
+      setJiraFeedback("Could not save Jira credentials");
+      return false;
     } finally {
       setIsJiraBusy(false);
     }
@@ -2179,24 +2265,29 @@ function Logger() {
   async function handleTestJiraConnection() {
     if (!window.loggerAPI?.jiraTestConnection) {
       setMessage("Jira test is not available");
+      setJiraFeedback("Jira test is not available");
       return;
     }
 
     setIsJiraBusy(true);
+    setJiraFeedback("Testing Jira connection...");
 
     try {
       const result = await window.loggerAPI.jiraTestConnection();
 
       if (!result?.success) {
         setMessage(result?.error || "Jira connection failed");
+        setJiraFeedback(result?.error || "Jira connection failed");
         return;
       }
 
       setMessageTone("success");
       setMessage(`Connected to Jira as ${result.user?.displayName || result.user?.emailAddress || "user"}`);
+      setJiraFeedback(`Connected to Jira as ${result.user?.displayName || result.user?.emailAddress || "user"}.`);
     } catch (error) {
       console.error("Could not test Jira connection:", error);
       setMessage("Could not test Jira connection");
+      setJiraFeedback("Could not test Jira connection");
     } finally {
       setIsJiraBusy(false);
     }
@@ -2205,16 +2296,19 @@ function Logger() {
   async function handleClearJiraCredentials() {
     if (!window.loggerAPI?.jiraClearCredentials) {
       setMessage("Jira storage is not available");
+      setJiraFeedback("Jira storage is not available");
       return;
     }
 
     setIsJiraBusy(true);
+    setJiraFeedback("Clearing Jira credentials...");
 
     try {
       const result = await window.loggerAPI.jiraClearCredentials();
 
       if (!result?.ok) {
         setMessage(result?.error || "Could not clear Jira credentials");
+        setJiraFeedback(result?.error || "Could not clear Jira credentials");
         return;
       }
 
@@ -2225,9 +2319,11 @@ function Logger() {
       });
       setMessageTone("success");
       setMessage("Jira credentials cleared");
+      setJiraFeedback("Jira credentials cleared.");
     } catch (error) {
       console.error("Could not clear Jira credentials:", error);
       setMessage("Could not clear Jira credentials");
+      setJiraFeedback("Could not clear Jira credentials");
     } finally {
       setIsJiraBusy(false);
     }
@@ -2236,15 +2332,18 @@ function Logger() {
   async function handleSyncJiraWorklogs() {
     if (!window.loggerAPI?.jiraSyncWorklogs) {
       setMessage("Jira sync is not available");
+      setJiraFeedback("Jira sync is not available");
       return;
     }
 
     if (!pendingJiraWorklogEntries.length) {
       setMessage("No Jira worklogs to sync");
+      setJiraFeedback("No Jira worklogs to sync.");
       return;
     }
 
     setIsJiraBusy(true);
+    setJiraFeedback(`Syncing ${pendingJiraWorklogEntries.length} Jira worklogs...`);
 
     try {
       const result = await window.loggerAPI.jiraSyncWorklogs(pendingJiraWorklogEntries);
@@ -2271,21 +2370,158 @@ function Logger() {
       }
 
       const failedCount = results.filter((item) => !item.success).length;
+      const firstFailure = results.find((item) => !item.success);
+      const failureText = firstFailure
+        ? ` First failure: ${firstFailure.issueKey || "entry"} - ${firstFailure.error || "Unknown error"}`
+        : "";
 
       if (!result?.ok || failedCount) {
         setMessage(
           `Synced ${successfulResults.length} Jira worklogs${failedCount ? `, ${failedCount} failed` : ""}`
+        );
+        setJiraFeedback(
+          `Synced ${successfulResults.length} Jira worklogs${failedCount ? `, ${failedCount} failed` : ""}.${failureText}`
         );
         return;
       }
 
       setMessageTone("success");
       setMessage(`Synced ${successfulResults.length} Jira worklogs`);
+      setJiraFeedback(`Synced ${successfulResults.length} Jira worklogs.`);
     } catch (error) {
       console.error("Could not sync Jira worklogs:", error);
       setMessage("Could not sync Jira worklogs");
+      setJiraFeedback("Could not sync Jira worklogs");
     } finally {
       setIsJiraBusy(false);
+    }
+  }
+
+  async function handleLoadJiraProjects() {
+    if (!window.loggerAPI?.jiraListProjects) {
+      setMessage("Jira project loading is not available");
+      setJiraFeedback("Jira project loading is not available");
+      return;
+    }
+
+    setIsJiraFetchingTickets(true);
+    setJiraFeedback("Loading Jira projects...");
+
+    try {
+      const result = await window.loggerAPI.jiraListProjects();
+
+      if (!result?.success) {
+        setMessage(result?.error || "Could not load Jira projects");
+        setJiraFeedback(result?.error || "Could not load Jira projects");
+        return;
+      }
+
+      const projects = Array.isArray(result.projects) ? result.projects : [];
+      setJiraProjects(projects);
+      setSelectedJiraProjectKeys((prev) => {
+        const availableKeys = new Set(projects.map((project) => project.key));
+        return prev.filter((key) => availableKeys.has(key));
+      });
+      setMessageTone("success");
+      setMessage(`Loaded ${projects.length} Jira projects`);
+      setJiraFeedback(`Loaded ${projects.length} Jira projects. Select projects, then fetch tickets.`);
+    } catch (error) {
+      console.error("Could not load Jira projects:", error);
+      setMessage("Could not load Jira projects");
+      setJiraFeedback("Could not load Jira projects");
+    } finally {
+      setIsJiraFetchingTickets(false);
+    }
+  }
+
+  function handleToggleJiraProject(projectKey) {
+    const key = String(projectKey ?? "").trim().toUpperCase();
+    if (!key) return;
+
+    setSelectedJiraProjectKeys((prev) =>
+      prev.includes(key)
+        ? prev.filter((item) => item !== key)
+        : [...prev, key]
+    );
+  }
+
+  async function handleFetchJiraTickets() {
+    if (!window.loggerAPI?.jiraFetchTickets) {
+      setMessage("Jira ticket fetching is not available");
+      setJiraFeedback("Jira ticket fetching is not available");
+      return;
+    }
+
+    setIsJiraFetchingTickets(true);
+    setJiraFeedback("Fetching Jira tickets...");
+
+    try {
+      const result = await window.loggerAPI.jiraFetchTickets({
+        projectKeys: selectedJiraProjectKeys,
+        query: jiraTicketQuery,
+        maxResults: 100,
+      });
+
+      if (!result?.success) {
+        setMessage(result?.error || "Could not fetch Jira tickets");
+        setJiraFeedback(result?.error || "Could not fetch Jira tickets");
+        return;
+      }
+
+      const fetchedTickets = Array.isArray(result.tickets) ? result.tickets : [];
+      const activeFilter = String(result.query || jiraTicketQuery || "").trim();
+      const selectedProjectsText = selectedJiraProjectKeys.length
+        ? selectedJiraProjectKeys.join(", ")
+        : "all accessible projects";
+      let addedCount = 0;
+      let updatedCount = 0;
+
+      setJiraTickets((prev) => {
+        const existingById = new Map(prev.map((ticket) => [String(ticket.id).toUpperCase(), ticket]));
+        const fetchedIds = new Set();
+        const fetchedFirst = [];
+
+        fetchedTickets.forEach((ticket) => {
+          const id = String(ticket.id ?? "").trim().toUpperCase();
+          if (!id) return;
+
+          const existing = existingById.get(id);
+          fetchedIds.add(id);
+
+          if (existing) {
+            const nextTitle = ticket.title || existing.title;
+            if (nextTitle !== existing.title) updatedCount += 1;
+            fetchedFirst.push({ ...existing, id, title: nextTitle });
+            return;
+          }
+
+          fetchedFirst.push({
+            id,
+            title: String(ticket.title ?? "").trim(),
+            favorite: false,
+          });
+          addedCount += 1;
+        });
+
+        const remaining = prev.filter((ticket) => {
+          const id = String(ticket.id ?? "").trim().toUpperCase();
+          return !fetchedIds.has(id) && !DEMO_TICKET_IDS.has(id);
+        });
+
+        return [...fetchedFirst, ...remaining];
+      });
+
+      setMessageTone("success");
+      setMessage(`Fetched ${fetchedTickets.length} Jira tickets`);
+      setJiraFeedback(
+        `Fetched ${fetchedTickets.length} Jira tickets from ${selectedProjectsText}${activeFilter ? ` with filter "${activeFilter}"` : ""}${addedCount ? `, added ${addedCount}` : ""}${updatedCount ? `, updated ${updatedCount}` : ""}${result.hasMore ? ", more available" : ""}.`
+      );
+    } catch (error) {
+      console.error("Could not fetch Jira tickets:", error);
+      setMessage("Could not fetch Jira tickets");
+      setJiraFeedback("Could not fetch Jira tickets");
+    } finally {
+      setIsJiraFetchingTickets(false);
     }
   }
 
@@ -2653,6 +2889,26 @@ function Logger() {
   }
 
   const canSaveManual = Boolean(manualTicket.trim() && (manualHours || manualMinutes));
+  const manualTicketSuggestionList = manualTicketSuggestions.length > 0 && (
+    <ul className="manual-ticket-suggestions">
+      {manualTicketSuggestions.map((ticket) => (
+        <li key={ticket.id}>
+          <button
+            type="button"
+            onMouseDown={(event) => {
+              event.preventDefault();
+              setManualTicket(`${ticket.id} - ${ticket.title}`);
+              setSelectedTicket(`${ticket.id} - ${ticket.title}`);
+              setManualFocused(null);
+            }}
+          >
+            <strong>{ticket.id}</strong>
+            {ticket.title && <span>{ticket.title}</span>}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
   const canSaveEdit = Boolean(editTicket.trim() && editDate && (editHours || editMinutes));
   const miniHasTicket = miniTicket.trim() !== "";
   const miniIsRunning = activeEntryId != null;
@@ -3583,6 +3839,8 @@ PROJ-456;2026-05-11;2t`}</pre>
                 />
               </div>
 
+              {manualFocused === "ticket" && manualTicketSuggestionList}
+
               <input
                 type="date"
                 value={manualDate}
@@ -3608,6 +3866,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                 className={manualFocused === "ticket" ? "focused" : ""}
                 placeholder={manualEntryType === "task" ? "e.g. Write meeting notes" : "e.g. PROJ-1234"}
               />
+              {manualFocused === "ticket" && manualTicketSuggestionList}
 
               <label className="manual-field-label">Date &amp; Duration</label>
               <div className="manual-row">
@@ -4112,6 +4371,11 @@ PROJ-456;2026-05-11;2t`}</pre>
               appLanguage={appLanguage}
               accentColors={ACCENT_COLORS}
               jiraStatus={jiraStatus}
+              jiraFeedback={jiraFeedback}
+              jiraProjects={jiraProjects}
+              selectedJiraProjectKeys={selectedJiraProjectKeys}
+              jiraTicketQuery={jiraTicketQuery}
+              isJiraFetchingTickets={isJiraFetchingTickets}
               isJiraBusy={isJiraBusy}
               pendingJiraSyncCount={pendingJiraWorklogEntries.length}
               onClose={() => setShowSettingsView(false)}
@@ -4120,6 +4384,10 @@ PROJ-456;2026-05-11;2t`}</pre>
               onTestJiraConnection={handleTestJiraConnection}
               onClearJiraCredentials={handleClearJiraCredentials}
               onSyncJiraWorklogs={handleSyncJiraWorklogs}
+              onLoadJiraProjects={handleLoadJiraProjects}
+              onToggleJiraProject={handleToggleJiraProject}
+              onChangeJiraTicketQuery={setJiraTicketQuery}
+              onFetchJiraTickets={handleFetchJiraTickets}
             />
           ) : (
             <div className="home-view">
@@ -4327,6 +4595,15 @@ PROJ-456;2026-05-11;2t`}</pre>
                     shortcut="M"
                     color="blue"
                     onClick={() => openManual(selectedTicket || "")}
+                  />
+
+                  <Btn
+                    icon="export"
+                    label={pendingJiraWorklogEntries.length ? `Sync Jira (${pendingJiraWorklogEntries.length})` : "Sync Jira"}
+                    color="purple"
+                    onClick={handleSyncJiraWorklogs}
+                    disabled={!canSyncJiraFromHome}
+                    style={{ gridColumn: "1 / -1", width: "100%" }}
                   />
                 </div>
               </section>

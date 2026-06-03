@@ -20,22 +20,32 @@ export function SettingsView({
   accentColors,
   jiraStatus = {},
   jiraFeedback = "",
+  tempoStatus = {},
+  tempoFeedback = "",
+  tempoSyncResults = [],
   jiraProjects = [],
   selectedJiraProjectKeys = [],
   jiraTicketQuery = "",
   isJiraFetchingTickets = false,
   isJiraBusy = false,
+  isTempoBusy = false,
   pendingJiraSyncCount = 0,
+  pendingTempoSyncCount = 0,
   onClose,
   onSave,
   onSaveJiraCredentials,
   onTestJiraConnection,
   onClearJiraCredentials,
   onSyncJiraWorklogs,
+  onSaveTempoCredentials,
+  onTestTempoConnection,
+  onClearTempoCredentials,
+  onSyncTempoWorklogs,
   onLoadJiraProjects,
   onToggleJiraProject,
   onChangeJiraTicketQuery,
   onFetchJiraTickets,
+  onOpenBugReport,
 }) {
   const text = appLanguage === "en"
     ? {
@@ -71,6 +81,23 @@ export function SettingsView({
         testJira: "Test connection",
         clearJira: "Clear",
         syncJira: "Sync worklogs",
+        tempo: "Tempo Timesheets",
+        tempoHelp: "Store the Tempo API token securely and sync completed time entries as Tempo worklogs.",
+        tempoApiToken: "API token",
+        tempoTokenSaved: "API token saved",
+        tempoTokenMissing: "No API token saved",
+        saveTempo: "Save Tempo",
+        testTempo: "Test connection",
+        clearTempo: "Clear",
+        syncTempo: "Sync worklogs",
+        tempoStepsTitle: "Tempo sync",
+        tempoSteps:
+          "Save your Tempo API token, test the connection, then sync completed ticket entries. Entries already synced to Tempo are skipped.",
+        tempoReadyToTest: "You can test after the Tempo token is saved.",
+        tempoSaveFirst: "Paste a Tempo API token before saving.",
+        tempoResults: "Last sync results",
+        noTempoResults: "No Tempo sync results yet.",
+        entry: "Entry",
         pendingSync: "Pending",
         jiraStepsTitle: "How to sync",
         jiraSteps:
@@ -86,6 +113,10 @@ export function SettingsView({
         ticketFilterHelp: "Leave empty to fetch all recent tickets from the selected projects.",
         noProjectsLoaded: "No Jira projects loaded yet.",
         selectedProjects: "Selected projects",
+        support: "Support",
+        bugReport: "Bug report",
+        bugReportHelp: "Open your email app with a prepared bug report template.",
+        openBugReport: "Report bug",
       }
     : {
         settings: "Innstillinger",
@@ -120,6 +151,23 @@ export function SettingsView({
         testJira: "Test tilkobling",
         clearJira: "Slett",
         syncJira: "Synk worklogs",
+        tempo: "Tempo Timesheets",
+        tempoHelp: "Lagre Tempo API token sikkert og synk ferdige time entries som Tempo worklogs.",
+        tempoApiToken: "API token",
+        tempoTokenSaved: "API token lagret",
+        tempoTokenMissing: "Ingen API token lagret",
+        saveTempo: "Lagre Tempo",
+        testTempo: "Test tilkobling",
+        clearTempo: "Slett",
+        syncTempo: "Synk worklogs",
+        tempoStepsTitle: "Tempo sync",
+        tempoSteps:
+          "Lagre Tempo API token, test tilkoblingen, og synk deretter ferdige ticket entries. Entries som allerede er synket til Tempo hoppes over.",
+        tempoReadyToTest: "Du kan teste etter at Tempo-tokenet er lagret.",
+        tempoSaveFirst: "Lim inn et Tempo API token forst.",
+        tempoResults: "Siste sync-resultater",
+        noTempoResults: "Ingen Tempo sync-resultater enna.",
+        entry: "Entry",
         pendingSync: "Venter",
         jiraStepsTitle: "Slik synker du",
         jiraSteps:
@@ -135,6 +183,10 @@ export function SettingsView({
         ticketFilterHelp: "La stå tomt for å hente alle nyeste tickets fra valgte prosjekter.",
         noProjectsLoaded: "Ingen Jira-prosjekter hentet ennå.",
         selectedProjects: "Valgte prosjekter",
+        support: "Support",
+        bugReport: "Bugrapport",
+        bugReportHelp: "Åpne e-postappen med en ferdig mal for bugrapport.",
+        openBugReport: "Rapporter bug",
       };
   const initialTarget = secondsToParts(dailyTargetSeconds);
   const [targetHours, setTargetHours] = useState(initialTarget.hours);
@@ -146,6 +198,7 @@ export function SettingsView({
   const [jiraBaseUrl, setJiraBaseUrl] = useState(jiraStatus.jiraBaseUrl || "");
   const [jiraEmail, setJiraEmail] = useState(jiraStatus.jiraEmail || "");
   const [jiraApiToken, setJiraApiToken] = useState("");
+  const [tempoApiToken, setTempoApiToken] = useState("");
 
   useEffect(() => {
     const nextTarget = secondsToParts(dailyTargetSeconds);
@@ -163,6 +216,10 @@ export function SettingsView({
     setJiraApiToken("");
   }, [jiraStatus.jiraBaseUrl, jiraStatus.jiraEmail, jiraStatus.hasJiraApiToken]);
 
+  useEffect(() => {
+    setTempoApiToken("");
+  }, [tempoStatus.hasTempoApiToken]);
+
   const nextDailyTargetSeconds =
     (Number(targetHours) || 0) * 3600 + (Number(targetMinutes) || 0) * 60;
   const canSave = nextDailyTargetSeconds > 0 && Number(retentionDays) > 0;
@@ -179,6 +236,11 @@ export function SettingsView({
   const canSyncJira = hasSavedJiraCredentials && !hasUnsavedJiraChanges && pendingJiraSyncCount > 0;
   const canUseJiraTicketTools = hasSavedJiraCredentials && !hasUnsavedJiraChanges;
   const selectedProjectCount = selectedJiraProjectKeys.length;
+  const canSaveTempo = Boolean(tempoApiToken.trim());
+  const hasSavedTempoCredentials = Boolean(tempoStatus.hasTempoApiToken);
+  const hasUnsavedTempoChanges = Boolean(tempoApiToken.trim());
+  const canTestTempo = hasSavedTempoCredentials || canSaveTempo;
+  const canSyncTempo = hasSavedTempoCredentials && !hasUnsavedTempoChanges && pendingTempoSyncCount > 0;
 
   function handleSave(event) {
     event.preventDefault();
@@ -231,6 +293,27 @@ export function SettingsView({
     }
 
     onTestJiraConnection();
+  }
+
+  async function handleSaveTempo() {
+    if (!canSaveTempo || !onSaveTempoCredentials) return;
+
+    const saved = await onSaveTempoCredentials({ tempoApiToken: tempoApiToken.trim() });
+    if (saved) setTempoApiToken("");
+  }
+
+  async function handleTestTempo() {
+    if (!canTestTempo || !onTestTempoConnection) return;
+
+    if (hasUnsavedTempoChanges) {
+      if (!canSaveTempo || !onSaveTempoCredentials) return;
+
+      const saved = await onSaveTempoCredentials({ tempoApiToken: tempoApiToken.trim() });
+      if (!saved) return;
+      setTempoApiToken("");
+    }
+
+    onTestTempoConnection();
   }
 
   return (
@@ -524,6 +607,93 @@ export function SettingsView({
               {isJiraFetchingTickets ? `${text.fetchTickets}...` : text.fetchTickets}
             </button>
           </div>
+        </div>
+
+        <div className="settings-card jira-settings-card tempo-settings-card">
+          <div className="settings-card-copy">
+            <strong>{text.tempo}</strong>
+            <span>{text.tempoHelp}</span>
+          </div>
+
+          <div className="jira-settings-grid">
+            <label className="settings-single-input">
+              <span>{text.tempoApiToken}</span>
+              <input
+                type="password"
+                value={tempoApiToken}
+                onChange={(event) => setTempoApiToken(event.target.value)}
+                autoComplete="new-password"
+                placeholder={tempoStatus.hasTempoApiToken ? text.tempoTokenSaved : ""}
+              />
+            </label>
+          </div>
+
+          <div className="jira-status-row">
+            <span className={tempoStatus.hasTempoApiToken ? "jira-token-status saved" : "jira-token-status"}>
+              {tempoStatus.hasTempoApiToken ? text.tempoTokenSaved : text.tempoTokenMissing}
+            </span>
+            <span>{text.pendingSync}: {pendingTempoSyncCount}</span>
+          </div>
+
+          <div className="jira-help-box">
+            <strong>{text.tempoStepsTitle}</strong>
+            <span>{text.tempoSteps}</span>
+            <span>{canTestTempo ? text.tempoReadyToTest : text.tempoSaveFirst}</span>
+          </div>
+
+          {tempoFeedback && (
+            <div className="jira-feedback" role="status">
+              {tempoFeedback}
+            </div>
+          )}
+
+          <div className="jira-actions">
+            <button type="button" onClick={handleSaveTempo} disabled={!canSaveTempo || isTempoBusy}>
+              {text.saveTempo}
+            </button>
+            <button type="button" onClick={handleTestTempo} disabled={!canTestTempo || isTempoBusy}>
+              {text.testTempo}
+            </button>
+            <button type="button" onClick={onSyncTempoWorklogs} disabled={!canSyncTempo || isTempoBusy}>
+              {text.syncTempo}
+            </button>
+            <button type="button" className="danger" onClick={onClearTempoCredentials} disabled={isTempoBusy}>
+              {text.clearTempo}
+            </button>
+          </div>
+
+          <div className="tempo-sync-results">
+            <div className="settings-card-copy compact">
+              <strong>{text.tempoResults}</strong>
+            </div>
+
+            {tempoSyncResults.length ? (
+              <ul>
+                {tempoSyncResults.slice(0, 10).map((result, index) => (
+                  <li key={`${result.entryId ?? "entry"}-${index}`} className={result.success ? "success" : "failed"}>
+                    <span>
+                      {text.entry} {result.entryId ?? index + 1}
+                      {result.issueKey ? ` - ${result.issueKey}` : result.issueId ? ` - ${result.issueId}` : ""}
+                    </span>
+                    <strong>{result.success ? `Tempo #${result.tempoWorklogId || result.worklog?.id || ""}` : result.error || "Unknown error"}</strong>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>{text.noTempoResults}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="settings-card">
+          <div className="settings-card-copy">
+            <strong>{text.bugReport}</strong>
+            <span>{text.bugReportHelp}</span>
+          </div>
+
+          <button type="button" className="bug-report-btn" onClick={onOpenBugReport}>
+            {text.openBugReport}
+          </button>
         </div>
 
         <div className="settings-actions">

@@ -200,6 +200,12 @@ function Logger() {
   const [jiraFeedback, setJiraFeedback] = useState("");
   const [isJiraBusy, setIsJiraBusy] = useState(false);
   const [isJiraFetchingTickets, setIsJiraFetchingTickets] = useState(false);
+  const [tempoStatus, setTempoStatus] = useState({
+    hasTempoApiToken: false,
+  });
+  const [tempoFeedback, setTempoFeedback] = useState("");
+  const [isTempoBusy, setIsTempoBusy] = useState(false);
+  const [tempoSyncResults, setTempoSyncResults] = useState([]);
   const [jiraProjects, setJiraProjects] = useState([]);
   const [selectedJiraProjectKeys, setSelectedJiraProjectKeys] = useState(() => {
     try {
@@ -356,6 +362,7 @@ function Logger() {
       entry.source !== "todo" &&
       !entry.todoTaskId &&
       !entry.jiraWorklogId &&
+      !entry.tempoWorklogId &&
       String(entry.ticketName ?? "").trim()
     );
   }
@@ -443,6 +450,50 @@ function Logger() {
         return {
           ...entry,
           jiraIssueKey,
+          jiraTicketTitle: matchingTicket?.title || "",
+        };
+      });
+  }, [activeEntries, jiraTickets]);
+
+  const pendingTempoWorklogEntries = useMemo(() => {
+    const ticketById = new Map(
+      jiraTickets.map((ticket) => [String(ticket.id ?? "").trim().toUpperCase(), ticket])
+    );
+    const ticketByTitle = new Map(
+      jiraTickets
+        .filter((ticket) => String(ticket.title ?? "").trim())
+        .map((ticket) => [String(ticket.title ?? "").trim().toLowerCase(), ticket])
+    );
+    const ticketByFullName = new Map(
+      jiraTickets
+        .filter((ticket) => String(ticket.id ?? "").trim())
+        .map((ticket) => [
+          `${String(ticket.id ?? "").trim()} - ${String(ticket.title ?? "").trim()}`.toLowerCase(),
+          ticket,
+        ])
+    );
+
+    return activeEntries
+      .filter((entry) =>
+        entry.status === "done" &&
+        entry.source !== "todo" &&
+        !entry.todoTaskId &&
+        !entry.tempoWorklogId &&
+        String(entry.ticketName ?? "").trim() &&
+        Number(entry.seconds) > 0
+      )
+      .map((entry) => {
+        const entryName = String(entry.ticketName ?? "").trim();
+        const parsedIssueKey = getJiraIssueKeyFromTicketName(entryName);
+        const matchingTicket =
+          ticketById.get(parsedIssueKey) ||
+          ticketByFullName.get(entryName.toLowerCase()) ||
+          ticketByTitle.get(entryName.toLowerCase());
+
+        return {
+          ...entry,
+          issueKey: matchingTicket?.id || parsedIssueKey,
+          jiraIssueId: matchingTicket?.issueId || "",
           jiraTicketTitle: matchingTicket?.title || "",
         };
       });
@@ -602,6 +653,11 @@ function Logger() {
     if (manualEntryType !== "ticket") return [];
     return getMatchingJiraTickets(manualTicket).slice(0, 5);
   }, [jiraTickets, manualEntryType, manualTicket]);
+
+  const quickCaptureTicketSuggestions = useMemo(() => {
+    if (quickCaptureType !== "ticket") return [];
+    return getMatchingJiraTickets(quickCaptureText).slice(0, 5);
+  }, [jiraTickets, quickCaptureText, quickCaptureType]);
 
   const favoriteTickets = useMemo(() => {
     return jiraTickets.filter((ticket) => ticket.favorite);
@@ -832,6 +888,27 @@ function Logger() {
     }
 
     loadJiraStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTempoStatus() {
+      if (!window.loggerAPI?.tempoGetStatus) return;
+
+      const result = await window.loggerAPI.tempoGetStatus();
+      if (cancelled || !result?.ok) return;
+
+      setTempoStatus({
+        hasTempoApiToken: Boolean(result.values?.hasTempoApiToken),
+      });
+    }
+
+    loadTempoStatus();
 
     return () => {
       cancelled = true;
@@ -1479,6 +1556,14 @@ function Logger() {
     setSelectedTicket(fullName);
     setSearch(fullName);
     setMessage(`Selected ${ticket.id}`);
+  }
+
+  function handleSelectQuickCaptureTicket(ticket) {
+    const fullName = ticket.title ? `${ticket.id} - ${ticket.title}` : ticket.id;
+    setQuickCaptureText(fullName);
+    setSelectedTicket(fullName);
+    setMessage(`Selected ${ticket.id}`);
+    quickCaptureRef.current?.focus();
   }
 
   function startEntry(ticketName, entryMeta = {}) {
@@ -2397,6 +2482,181 @@ function Logger() {
     }
   }
 
+  async function handleSaveTempoCredentials(credentials = {}) {
+    if (!window.loggerAPI?.tempoSaveCredentials) {
+      setMessage("Tempo storage is not available");
+      setTempoFeedback("Tempo storage is not available");
+      return false;
+    }
+
+    setIsTempoBusy(true);
+    setTempoFeedback("Saving Tempo token...");
+
+    try {
+      const result = await window.loggerAPI.tempoSaveCredentials(credentials);
+
+      if (!result?.ok) {
+        setMessage(result?.error || "Could not save Tempo token");
+        setTempoFeedback(result?.error || "Could not save Tempo token");
+        return false;
+      }
+
+      setTempoStatus({
+        hasTempoApiToken: Boolean(result.values?.hasTempoApiToken),
+      });
+      setMessageTone("success");
+      setMessage("Tempo token saved");
+      setTempoFeedback("Tempo token saved. You can test the connection now.");
+      return true;
+    } catch (error) {
+      console.error("Could not save Tempo token:", error);
+      setMessage("Could not save Tempo token");
+      setTempoFeedback("Could not save Tempo token");
+      return false;
+    } finally {
+      setIsTempoBusy(false);
+    }
+  }
+
+  async function handleTestTempoConnection() {
+    if (!window.loggerAPI?.tempoTestConnection) {
+      setMessage("Tempo test is not available");
+      setTempoFeedback("Tempo test is not available");
+      return;
+    }
+
+    setIsTempoBusy(true);
+    setTempoFeedback("Testing Tempo connection...");
+
+    try {
+      const result = await window.loggerAPI.tempoTestConnection();
+
+      if (!result?.success) {
+        setMessage(result?.error || "Tempo connection failed");
+        setTempoFeedback(result?.error || "Tempo connection failed");
+        return;
+      }
+
+      const userText =
+        result.info?.user?.displayName ||
+        result.info?.user?.accountId ||
+        result.info?.account?.name ||
+        "Tempo";
+      setMessageTone("success");
+      setMessage(`Connected to ${userText}`);
+      setTempoFeedback(`Connected to ${userText}.`);
+    } catch (error) {
+      console.error("Could not test Tempo connection:", error);
+      setMessage("Could not test Tempo connection");
+      setTempoFeedback("Could not test Tempo connection");
+    } finally {
+      setIsTempoBusy(false);
+    }
+  }
+
+  async function handleClearTempoCredentials() {
+    if (!window.loggerAPI?.tempoClearCredentials) {
+      setMessage("Tempo storage is not available");
+      setTempoFeedback("Tempo storage is not available");
+      return;
+    }
+
+    setIsTempoBusy(true);
+    setTempoFeedback("Clearing Tempo token...");
+
+    try {
+      const result = await window.loggerAPI.tempoClearCredentials();
+
+      if (!result?.ok) {
+        setMessage(result?.error || "Could not clear Tempo token");
+        setTempoFeedback(result?.error || "Could not clear Tempo token");
+        return;
+      }
+
+      setTempoStatus({ hasTempoApiToken: false });
+      setTempoSyncResults([]);
+      setMessageTone("success");
+      setMessage("Tempo token cleared");
+      setTempoFeedback("Tempo token cleared.");
+    } catch (error) {
+      console.error("Could not clear Tempo token:", error);
+      setMessage("Could not clear Tempo token");
+      setTempoFeedback("Could not clear Tempo token");
+    } finally {
+      setIsTempoBusy(false);
+    }
+  }
+
+  async function handleSyncTempoWorklogs() {
+    if (!window.loggerAPI?.tempoSyncWorklogs) {
+      setMessage("Tempo sync is not available");
+      setTempoFeedback("Tempo sync is not available");
+      return;
+    }
+
+    if (!pendingTempoWorklogEntries.length) {
+      setMessage("No Tempo worklogs to sync");
+      setTempoFeedback("No Tempo worklogs to sync.");
+      setTempoSyncResults([]);
+      return;
+    }
+
+    setIsTempoBusy(true);
+    setTempoFeedback(`Syncing ${pendingTempoWorklogEntries.length} Tempo worklogs...`);
+
+    try {
+      const result = await window.loggerAPI.tempoSyncWorklogs(pendingTempoWorklogEntries);
+      const results = Array.isArray(result?.results) ? result.results : [];
+      const successfulResults = results.filter((item) => item.success && item.tempoWorklogId);
+      const syncedAt = new Date().toISOString();
+      setTempoSyncResults(results);
+
+      if (successfulResults.length) {
+        const resultByEntryId = new Map(successfulResults.map((item) => [item.entryId, item]));
+
+        setEntries((prev) =>
+          prev.map((entry) => {
+            const syncedResult = resultByEntryId.get(entry.id);
+            if (!syncedResult) return entry;
+
+            return {
+              ...entry,
+              tempoWorklogId: syncedResult.tempoWorklogId,
+              tempoWorklogSelf: syncedResult.worklog?.self || "",
+              tempoSyncedAt: syncedAt,
+            };
+          })
+        );
+      }
+
+      const failedCount = results.filter((item) => !item.success).length;
+      const firstFailure = results.find((item) => !item.success);
+      const failureText = firstFailure
+        ? ` First failure: ${firstFailure.issueKey || firstFailure.issueId || "entry"} - ${firstFailure.error || "Unknown error"}`
+        : "";
+
+      if (!result?.ok || failedCount) {
+        setMessage(
+          `Synced ${successfulResults.length} Tempo worklogs${failedCount ? `, ${failedCount} failed` : ""}`
+        );
+        setTempoFeedback(
+          `Synced ${successfulResults.length} Tempo worklogs${failedCount ? `, ${failedCount} failed` : ""}.${failureText}`
+        );
+        return;
+      }
+
+      setMessageTone("success");
+      setMessage(`Synced ${successfulResults.length} Tempo worklogs`);
+      setTempoFeedback(`Synced ${successfulResults.length} Tempo worklogs.`);
+    } catch (error) {
+      console.error("Could not sync Tempo worklogs:", error);
+      setMessage("Could not sync Tempo worklogs");
+      setTempoFeedback("Could not sync Tempo worklogs");
+    } finally {
+      setIsTempoBusy(false);
+    }
+  }
+
   async function handleLoadJiraProjects() {
     if (!window.loggerAPI?.jiraListProjects) {
       setMessage("Jira project loading is not available");
@@ -2490,13 +2750,15 @@ function Logger() {
 
           if (existing) {
             const nextTitle = ticket.title || existing.title;
+            const nextIssueId = ticket.issueId || existing.issueId || "";
             if (nextTitle !== existing.title) updatedCount += 1;
-            fetchedFirst.push({ ...existing, id, title: nextTitle });
+            fetchedFirst.push({ ...existing, id, issueId: nextIssueId, title: nextTitle });
             return;
           }
 
           fetchedFirst.push({
             id,
+            issueId: String(ticket.issueId ?? "").trim(),
             title: String(ticket.title ?? "").trim(),
             favorite: false,
           });
@@ -2522,6 +2784,31 @@ function Logger() {
       setJiraFeedback("Could not fetch Jira tickets");
     } finally {
       setIsJiraFetchingTickets(false);
+    }
+  }
+
+  async function handleOpenBugReport() {
+    if (!window.loggerAPI?.openBugReportEmail) {
+      setMessage("Bug reporting is not available");
+      return;
+    }
+
+    try {
+      const result = await window.loggerAPI.openBugReportEmail({
+        language: appLanguage,
+        theme: themePreset,
+      });
+
+      if (!result?.ok) {
+        setMessage(result?.error || "Could not open email app");
+        return;
+      }
+
+      setMessageTone("success");
+      setMessage("Bug report email opened");
+    } catch (error) {
+      console.error("Could not open bug report email:", error);
+      setMessage("Could not open email app");
     }
   }
 
@@ -4372,22 +4659,32 @@ PROJ-456;2026-05-11;2t`}</pre>
               accentColors={ACCENT_COLORS}
               jiraStatus={jiraStatus}
               jiraFeedback={jiraFeedback}
+              tempoStatus={tempoStatus}
+              tempoFeedback={tempoFeedback}
+              tempoSyncResults={tempoSyncResults}
               jiraProjects={jiraProjects}
               selectedJiraProjectKeys={selectedJiraProjectKeys}
               jiraTicketQuery={jiraTicketQuery}
               isJiraFetchingTickets={isJiraFetchingTickets}
               isJiraBusy={isJiraBusy}
+              isTempoBusy={isTempoBusy}
               pendingJiraSyncCount={pendingJiraWorklogEntries.length}
+              pendingTempoSyncCount={pendingTempoWorklogEntries.length}
               onClose={() => setShowSettingsView(false)}
               onSave={handleSaveSettings}
               onSaveJiraCredentials={handleSaveJiraCredentials}
               onTestJiraConnection={handleTestJiraConnection}
               onClearJiraCredentials={handleClearJiraCredentials}
               onSyncJiraWorklogs={handleSyncJiraWorklogs}
+              onSaveTempoCredentials={handleSaveTempoCredentials}
+              onTestTempoConnection={handleTestTempoConnection}
+              onClearTempoCredentials={handleClearTempoCredentials}
+              onSyncTempoWorklogs={handleSyncTempoWorklogs}
               onLoadJiraProjects={handleLoadJiraProjects}
               onToggleJiraProject={handleToggleJiraProject}
               onChangeJiraTicketQuery={setJiraTicketQuery}
               onFetchJiraTickets={handleFetchJiraTickets}
+              onOpenBugReport={handleOpenBugReport}
             />
           ) : (
             <div className="home-view">
@@ -4446,6 +4743,22 @@ PROJ-456;2026-05-11;2t`}</pre>
                     <span>{quickCaptureType === "task" ? text.addTask : "Start"}</span>
                   </button>
                 </form>
+
+                {quickCaptureTicketSuggestions.length > 0 && (
+                  <ul className="quick-ticket-suggestions">
+                    {quickCaptureTicketSuggestions.map((ticket) => (
+                      <li key={ticket.id}>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectQuickCaptureTicket(ticket)}
+                        >
+                          <strong>{ticket.id}</strong>
+                          {ticket.title && <span>{ticket.title}</span>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
 
               <section className="section remaining-card">
@@ -4841,6 +5154,12 @@ PROJ-456;2026-05-11;2t`}</pre>
                                 <>
                                   <span className="entry-meta-separator">-</span>
                                   <span className="entry-jira-sync">Jira synced</span>
+                                </>
+                              )}
+                              {entry.tempoWorklogId && (
+                                <>
+                                  <span className="entry-meta-separator">-</span>
+                                  <span className="entry-jira-sync">Tempo synced</span>
                                 </>
                               )}
                             </div>

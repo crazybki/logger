@@ -9,15 +9,22 @@ const {
   globalShortcut,
   dialog,
   powerMonitor,
+  shell,
+  session,
 } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const { pathToFileURL } = require("url");
 const XLSX = require("xlsx");
+const { autoUpdater } = require("electron-updater");
 
 let mainWindow;
 let tray;
 let isQuitting = false;
 let secureStoreWriteQueue = Promise.resolve();
+let updateCheckPromise = null;
+let isUpdateDownloaded = false;
+let hasStartedUpdateCheck = false;
 
 const NORMAL_SIZE = { width: 400, height: 700 };
 const MINI_SIZE = { width: 420, height: 305 };
@@ -27,8 +34,11 @@ const MAX_IMPORT_ROWS = 5000;
 const MAX_CELL_LENGTH = 300;
 const MAX_NOTIFICATION_LENGTH = 160;
 const MAX_JIRA_SYNC_ENTRIES = 100;
+const MAX_TEMPO_SYNC_ENTRIES = 100;
 const MAX_JIRA_PROJECTS = 100;
 const MAX_JIRA_FETCH_TICKETS = 100;
+const BUG_REPORT_EMAIL = "support@example.com";
+const TEMPO_API_BASE_URL = "https://api.tempo.io/4";
 const SECURE_STORE_KEYS = new Set([
   "timeEntries",
   "jiraTickets",
@@ -42,6 +52,12 @@ const JIRA_SECURE_STORE_KEYS = new Set([
   "jiraEmail",
   "jiraApiToken",
 ]);
+const TEMPO_SECURE_STORE_KEYS = new Set([
+  "tempoApiToken",
+]);
+const DEV_SERVER_URL = "http://localhost:5173";
+
+autoUpdater.autoDownload = true;
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.attensi.timelogger");
@@ -71,6 +87,112 @@ function showMainWindow() {
 function sendRendererAction(channel) {
   showMainWindow();
   mainWindow?.webContents.send(channel);
+}
+
+function sanitizeUpdateInfo(info = {}) {
+  return {
+    version: truncateText(info.version, 80),
+    releaseName: truncateText(info.releaseName, 160),
+    releaseDate: truncateText(info.releaseDate, 80),
+  };
+}
+
+function sanitizeDownloadProgress(progress = {}) {
+  const percent = Number(progress.percent);
+  const bytesPerSecond = Number(progress.bytesPerSecond);
+  const transferred = Number(progress.transferred);
+  const total = Number(progress.total);
+
+  return {
+    percent: Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0,
+    bytesPerSecond: Number.isFinite(bytesPerSecond) ? Math.max(0, bytesPerSecond) : 0,
+    transferred: Number.isFinite(transferred) ? Math.max(0, transferred) : 0,
+    total: Number.isFinite(total) ? Math.max(0, total) : 0,
+  };
+}
+
+function sendUpdateStatus(status, payload = {}) {
+  mainWindow?.webContents.send("updates:status", {
+    status,
+    ...payload,
+  });
+}
+
+function registerAutoUpdaterEvents() {
+  autoUpdater.on("checking-for-update", () => {
+    sendUpdateStatus("checking");
+  });
+
+  autoUpdater.on("update-available", (info) => {
+    isUpdateDownloaded = false;
+    sendUpdateStatus("update-available", {
+      update: sanitizeUpdateInfo(info),
+    });
+  });
+
+  autoUpdater.on("update-not-available", (info) => {
+    sendUpdateStatus("update-not-available", {
+      update: sanitizeUpdateInfo(info),
+    });
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    sendUpdateStatus("download-progress", {
+      progress: sanitizeDownloadProgress(progress),
+    });
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    isUpdateDownloaded = true;
+    sendUpdateStatus("update-downloaded", {
+      update: sanitizeUpdateInfo(info),
+    });
+  });
+
+  autoUpdater.on("error", (error) => {
+    sendUpdateStatus("error", {
+      error: truncateText(error?.message || "Update failed", MAX_NOTIFICATION_LENGTH),
+    });
+  });
+}
+
+async function checkForUpdates() {
+  if (!app.isPackaged) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "Updates are only checked in packaged builds.",
+    };
+  }
+
+  if (updateCheckPromise) {
+    return updateCheckPromise;
+  }
+
+  updateCheckPromise = autoUpdater.checkForUpdates()
+    .then(() => ({ ok: true }))
+    .catch((error) => {
+      sendUpdateStatus("error", {
+        error: truncateText(error?.message || "Update failed", MAX_NOTIFICATION_LENGTH),
+      });
+
+      return {
+        ok: false,
+        error: truncateText(error?.message || "Update failed", MAX_NOTIFICATION_LENGTH),
+      };
+    })
+    .finally(() => {
+      updateCheckPromise = null;
+    });
+
+  return updateCheckPromise;
+}
+
+function checkForUpdatesAtStartup() {
+  if (hasStartedUpdateCheck) return;
+
+  hasStartedUpdateCheck = true;
+  checkForUpdates();
 }
 
 function createTray() {
@@ -206,6 +328,12 @@ function assertJiraSecureStoreKey(key) {
   }
 }
 
+function assertTempoSecureStoreKey(key) {
+  if (!TEMPO_SECURE_STORE_KEYS.has(key)) {
+    throw new Error("Tempo secure store key is not allowed");
+  }
+}
+
 function encryptValue(value) {
   assertSecureStoreAvailable();
   return safeStorage.encryptString(JSON.stringify(value)).toString("base64");
@@ -223,6 +351,21 @@ async function getJiraSecureValues() {
   const values = {};
 
   JIRA_SECURE_STORE_KEYS.forEach((key) => {
+    if (store[key]) {
+      values[key] = decryptValue(store[key]);
+    }
+  });
+
+  return values;
+}
+
+async function getTempoSecureValues() {
+  assertSecureStoreAvailable();
+
+  const store = await readSecureStore();
+  const values = {};
+
+  TEMPO_SECURE_STORE_KEYS.forEach((key) => {
     if (store[key]) {
       values[key] = decryptValue(store[key]);
     }
@@ -257,6 +400,10 @@ function sanitizeJiraApiToken(value) {
   return truncateText(value, 1000);
 }
 
+function sanitizeTempoApiToken(value) {
+  return truncateText(value, 1000);
+}
+
 function getJiraCredentialsStatus(values) {
   return {
     jiraBaseUrl: values.jiraBaseUrl || "",
@@ -265,8 +412,18 @@ function getJiraCredentialsStatus(values) {
   };
 }
 
+function getTempoCredentialsStatus(values) {
+  return {
+    hasTempoApiToken: Boolean(values.tempoApiToken),
+  };
+}
+
 function getJiraAuthHeader(email, apiToken) {
   return `Basic ${Buffer.from(`${email}:${apiToken}`, "utf8").toString("base64")}`;
+}
+
+function getTempoAuthHeader(apiToken) {
+  return `Bearer ${apiToken}`;
 }
 
 async function getJiraConnectionDetails() {
@@ -285,6 +442,20 @@ async function getJiraConnectionDetails() {
   };
 }
 
+async function getTempoConnectionDetails() {
+  const values = await getTempoSecureValues();
+  const tempoApiToken = sanitizeTempoApiToken(values.tempoApiToken);
+
+  if (!tempoApiToken) {
+    throw new Error("Tempo credentials are incomplete");
+  }
+
+  return {
+    tempoApiBaseUrl: TEMPO_API_BASE_URL,
+    authHeader: getTempoAuthHeader(tempoApiToken),
+  };
+}
+
 function normalizeJiraUserInfo(user = {}) {
   return {
     accountId: truncateText(user.accountId, 120),
@@ -292,6 +463,31 @@ function normalizeJiraUserInfo(user = {}) {
     emailAddress: truncateText(user.emailAddress, 300),
     active: Boolean(user.active),
   };
+}
+
+function createBugReportBody(options = {}) {
+  const appVersion = truncateText(app.getVersion(), 80);
+  const language = truncateText(options.language, 40) || "unknown";
+  const theme = truncateText(options.theme, 80) || "unknown";
+
+  return [
+    `App version: ${appVersion}`,
+    `Platform: ${process.platform} ${process.arch}`,
+    `Electron: ${process.versions.electron}`,
+    `Timestamp: ${new Date().toISOString()}`,
+    `Language: ${language}`,
+    `Theme: ${theme}`,
+    "",
+    "What is wrong?",
+    "",
+    "",
+    "What error message do you get?",
+    "",
+    "",
+    "When does this happen in the app?",
+    "",
+    "",
+  ].join("\n");
 }
 
 function padDatePart(value, size = 2) {
@@ -358,6 +554,70 @@ function formatJiraStarted(value) {
   ].join("");
 }
 
+function formatTempoDate(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+
+  return [
+    padDatePart(safeDate.getFullYear(), 4),
+    "-",
+    padDatePart(safeDate.getMonth() + 1),
+    "-",
+    padDatePart(safeDate.getDate()),
+  ].join("");
+}
+
+function formatTempoTime(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+
+  return [
+    padDatePart(safeDate.getHours()),
+    ":",
+    padDatePart(safeDate.getMinutes()),
+    ":",
+    padDatePart(safeDate.getSeconds()),
+  ].join("");
+}
+
+function getTempoStartDetails(value, fallbackDateKey = "") {
+  const rawValue = truncateText(value || fallbackDateKey, 80);
+  let date;
+
+  const dateOnlyMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    const now = new Date();
+    const selectedYear = Number(dateOnlyMatch[1]);
+    const selectedMonth = Number(dateOnlyMatch[2]) - 1;
+    const selectedDay = Number(dateOnlyMatch[3]);
+    const isToday =
+      selectedYear === now.getFullYear() &&
+      selectedMonth === now.getMonth() &&
+      selectedDay === now.getDate();
+
+    date = new Date(
+      selectedYear,
+      selectedMonth,
+      selectedDay,
+      isToday ? now.getHours() : 9,
+      isToday ? now.getMinutes() : 0,
+      isToday ? now.getSeconds() : 0,
+      0
+    );
+  } else {
+    date = rawValue ? new Date(rawValue) : new Date();
+  }
+
+  if (Number.isNaN(date.getTime())) {
+    date = new Date();
+  }
+
+  return {
+    startDate: formatTempoDate(date),
+    startTime: formatTempoTime(date),
+  };
+}
+
 function createJiraCommentDocument(text) {
   return {
     type: "doc",
@@ -377,7 +637,7 @@ function createJiraCommentDocument(text) {
 }
 
 function getJiraIssueDetails(entry) {
-  const explicitIssueKey = truncateText(entry.jiraIssueKey, 80);
+  const explicitIssueKey = truncateText(entry.jiraIssueKey, 80) || truncateText(entry.issueKey, 80);
   const ticketName = truncateText(entry.ticketName, 160);
   const ticketTitle = truncateText(entry.jiraTicketTitle, 220);
   const combinedMatch = ticketName.match(/^([A-Z][A-Z0-9]+-\d+)(?:\s+-\s+(.+))?$/i);
@@ -427,6 +687,7 @@ function normalizeJiraTicket(issue = {}) {
 
   return {
     id,
+    issueId: truncateText(issue.id, 80),
     title: truncateText(issue.fields?.summary, 220),
     favorite: false,
   };
@@ -503,6 +764,38 @@ async function resolveJiraIssueDetails(jiraBaseUrl, authHeader, entry) {
   };
 }
 
+async function getJiraCurrentUser(jiraBaseUrl, authHeader) {
+  const response = await fetch(`${jiraBaseUrl}/rest/api/3/myself`, {
+    method: "GET",
+    headers: {
+      Authorization: authHeader,
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getJiraResponseError(response));
+  }
+
+  return response.json();
+}
+
+async function resolveJiraIssueByKey(jiraBaseUrl, authHeader, issueKey) {
+  const response = await fetch(`${jiraBaseUrl}/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=summary`, {
+    method: "GET",
+    headers: {
+      Authorization: authHeader,
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await getJiraResponseError(response));
+  }
+
+  return response.json();
+}
+
 function normalizeJiraWorklogEntry(entry) {
   if (!entry || typeof entry !== "object") {
     return { valid: false, error: "Invalid entry" };
@@ -549,6 +842,208 @@ function normalizeJiraWorklogResult(entry, responseBody = {}) {
   };
 }
 
+function getTempoIssueDetails(entry) {
+  const jiraDetails = getJiraIssueDetails(entry);
+  const explicitIssueId =
+    truncateText(entry.tempoIssueId, 80) ||
+    truncateText(entry.jiraIssueId, 80) ||
+    truncateText(entry.issueId, 80);
+  const issueId = /^\d+$/.test(explicitIssueId) ? Number(explicitIssueId) : null;
+  const issueKey = truncateText(entry.tempoIssueKey, 80) || jiraDetails.issueKey;
+  const authorAccountId =
+    truncateText(entry.tempoAuthorAccountId, 120) ||
+    truncateText(entry.authorAccountId, 120) ||
+    truncateText(entry.jiraAuthorAccountId, 120);
+
+  return {
+    issueId,
+    issueKey,
+    authorAccountId,
+    title: jiraDetails.title,
+    displayName: jiraDetails.displayName,
+  };
+}
+
+function normalizeTempoWorklogEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    return { valid: false, error: "Invalid entry" };
+  }
+
+  const { issueId, issueKey, authorAccountId, title, displayName } = getTempoIssueDetails(entry);
+  if (!issueId && !issueKey) {
+    return { valid: false, id: entry.id ?? null, error: "Entry has no Tempo issue id or issue key" };
+  }
+
+  const timeSpentSeconds = Math.round(Number(entry.seconds));
+  if (!Number.isFinite(timeSpentSeconds) || timeSpentSeconds <= 0) {
+    return {
+      valid: false,
+      id: entry.id ?? null,
+      issueId,
+      issueKey,
+      authorAccountId,
+      error: "Entry has no logged time",
+    };
+  }
+
+  if (entry.deletedAt) {
+    return {
+      valid: false,
+      id: entry.id ?? null,
+      issueId,
+      issueKey,
+      authorAccountId,
+      error: "Entry is deleted",
+    };
+  }
+
+  if (entry.tempoWorklogId) {
+    return {
+      valid: false,
+      id: entry.id ?? null,
+      issueId,
+      issueKey,
+      authorAccountId,
+      error: "Entry is already synced to Tempo",
+    };
+  }
+
+  const { startDate, startTime } = getTempoStartDetails(entry.createdAt, entry.dateKey);
+
+  return {
+    valid: true,
+    id: entry.id ?? null,
+    issueId,
+    issueKey,
+    authorAccountId,
+    title,
+    displayName,
+    timeSpentSeconds,
+    startDate,
+    startTime,
+    description: truncateText(`Logged from Time Logger: ${displayName}`, 500),
+  };
+}
+
+async function resolveTempoWorklogEntry(entry, getJiraDetails, getCurrentJiraUser) {
+  let nextEntry = entry;
+
+  if (!nextEntry.authorAccountId) {
+    const user = await getCurrentJiraUser();
+    const accountId = truncateText(user.accountId, 120);
+    if (!accountId) {
+      return {
+        ...nextEntry,
+        resolveError: "Could not resolve Jira author account id",
+      };
+    }
+
+    nextEntry = {
+      ...nextEntry,
+      authorAccountId: accountId,
+    };
+  }
+
+  if (!nextEntry.issueId) {
+    if (!isJiraIssueKey(nextEntry.issueKey)) {
+      return {
+        ...nextEntry,
+        resolveError: "Entry needs a Jira issue key so Tempo issue id can be resolved",
+      };
+    }
+
+    const { jiraBaseUrl, authHeader } = await getJiraDetails();
+    const issue = await resolveJiraIssueByKey(jiraBaseUrl, authHeader, nextEntry.issueKey);
+    const issueId = Number(issue.id);
+
+    if (!Number.isFinite(issueId) || issueId <= 0) {
+      return {
+        ...nextEntry,
+        resolveError: `Could not resolve Jira issue id for ${nextEntry.issueKey}`,
+      };
+    }
+
+    const title = truncateText(issue.fields?.summary || nextEntry.title, 220);
+
+    nextEntry = {
+      ...nextEntry,
+      issueId,
+      issueKey: truncateText(issue.key || nextEntry.issueKey, 80),
+      title,
+      displayName: title ? `${issue.key || nextEntry.issueKey} - ${title}` : nextEntry.displayName,
+    };
+  }
+
+  return nextEntry;
+}
+
+function createTempoWorklogPayload(entry) {
+  return {
+    issueId: entry.issueId,
+    authorAccountId: entry.authorAccountId,
+    timeSpentSeconds: entry.timeSpentSeconds,
+    startDate: entry.startDate,
+    startTime: entry.startTime,
+    description: entry.description,
+  };
+}
+
+function normalizeTempoWorklogResult(entry, responseBody = {}) {
+  const tempoWorklogId = truncateText(responseBody.id || responseBody.tempoWorklogId, 80);
+
+  return {
+    entryId: entry.id,
+    success: true,
+    tempoWorklogId,
+    issueId: entry.issueId || null,
+    issueKey: entry.issueKey || "",
+    worklog: {
+      id: tempoWorklogId,
+      self: truncateText(responseBody.self, 300),
+      timeSpentSeconds: Number(responseBody.timeSpentSeconds) || entry.timeSpentSeconds,
+      startDate: truncateText(responseBody.startDate, 80) || entry.startDate,
+      startTime: truncateText(responseBody.startTime, 80) || entry.startTime,
+    },
+  };
+}
+
+function normalizeTempoConnectionInfo(body = {}) {
+  const result = Array.isArray(body.results) ? body.results.find(Boolean) : null;
+  const author = body.author || result?.author || null;
+  const account = body.account || result?.account || null;
+  const info = {};
+
+  if (body.self) {
+    info.self = truncateText(body.self, 300);
+  }
+
+  if (body.metadata && typeof body.metadata === "object") {
+    info.metadata = {
+      count: Number(body.metadata.count) || 0,
+      limit: Number(body.metadata.limit) || 0,
+    };
+  }
+
+  if (author && typeof author === "object") {
+    info.user = {
+      accountId: truncateText(author.accountId || author.id, 120),
+      displayName: truncateText(author.displayName || author.name, 160),
+      self: truncateText(author.self, 300),
+    };
+  }
+
+  if (account && typeof account === "object") {
+    info.account = {
+      id: truncateText(account.id, 80),
+      key: truncateText(account.key, 120),
+      name: truncateText(account.name, 180),
+      self: truncateText(account.self, 300),
+    };
+  }
+
+  return info;
+}
+
 async function getJiraResponseError(response) {
   const fallback = `Jira request failed with status ${response.status}`;
 
@@ -576,7 +1071,69 @@ async function getJiraResponseError(response) {
   }
 }
 
+async function getTempoResponseError(response) {
+  const fallback = `Tempo request failed with status ${response.status}`;
+
+  try {
+    const body = await response.json();
+    const messages = [];
+
+    if (Array.isArray(body.errors)) {
+      messages.push(...body.errors.map((error) => {
+        if (typeof error === "string") return truncateText(error, 220);
+        return truncateText(error.message || error.detail || error.title || error.code, 220);
+      }));
+    }
+
+    if (Array.isArray(body.errorMessages)) {
+      messages.push(...body.errorMessages.map((message) => truncateText(message, 220)));
+    }
+
+    if (body.errors && typeof body.errors === "object" && !Array.isArray(body.errors)) {
+      Object.entries(body.errors).forEach(([field, message]) => {
+        messages.push(`${truncateText(field, 80)}: ${truncateText(message, 220)}`);
+      });
+    }
+
+    if (typeof body.message === "string") {
+      messages.push(truncateText(body.message, 220));
+    }
+
+    if (typeof body.error === "string") {
+      messages.push(truncateText(body.error, 220));
+    }
+
+    return messages.filter(Boolean).join("; ") || fallback;
+  } catch {
+    try {
+      return truncateText(await response.text(), 300) || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+}
+
+function getProductionAppUrl() {
+  return pathToFileURL(path.join(__dirname, "..", "dist", "index.html")).href;
+}
+
+function isAllowedAppNavigation(targetUrl, isDev) {
+  try {
+    const parsedUrl = new URL(targetUrl);
+
+    if (isDev) {
+      return parsedUrl.origin === DEV_SERVER_URL;
+    }
+
+    return targetUrl === getProductionAppUrl();
+  } catch {
+    return false;
+  }
+}
+
 function createWindow() {
+  const isDev = !app.isPackaged;
+
   mainWindow = new BrowserWindow({
     width: NORMAL_SIZE.width,
     height: NORMAL_SIZE.height,
@@ -591,15 +1148,24 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       backgroundThrottling: false,
       preload: path.join(__dirname, "preload.js"),
     },
   });
 
-  const isDev = !app.isPackaged;
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+
+  mainWindow.webContents.on("will-navigate", (event, targetUrl) => {
+    if (isAllowedAppNavigation(targetUrl, isDev)) return;
+
+    event.preventDefault();
+  });
+
+  mainWindow.webContents.once("did-finish-load", checkForUpdatesAtStartup);
 
   if (isDev) {
-    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.loadURL(DEV_SERVER_URL);
   } else {
     mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
@@ -636,9 +1202,11 @@ function registerShortcuts() {
     mainWindow?.webContents.send("shortcut:finish");
   });
 
-  globalShortcut.register("CommandOrControl+Shift+I", () => {
-    mainWindow?.webContents.toggleDevTools();
-  });
+  if (!app.isPackaged) {
+    globalShortcut.register("CommandOrControl+Shift+I", () => {
+      mainWindow?.webContents.toggleDevTools();
+    });
+  }
 }
 
 ipcMain.on("window:set-mini-mode", (_, isMini) => {
@@ -651,6 +1219,21 @@ ipcMain.on("window:minimize", () => {
 
 ipcMain.on("window:close", () => {
   mainWindow?.close();
+});
+
+ipcMain.handle("updates:check", () => checkForUpdates());
+
+ipcMain.handle("updates:quit-and-install", () => {
+  if (!isUpdateDownloaded) {
+    return {
+      ok: false,
+      error: "No downloaded update is ready to install.",
+    };
+  }
+
+  isQuitting = true;
+  autoUpdater.quitAndInstall(false, true);
+  return { ok: true };
 });
 
 ipcMain.handle("notification:show", (_, options = {}) => {
@@ -669,6 +1252,17 @@ ipcMain.handle("notification:show", (_, options = {}) => {
   notification.show();
 
   return { ok: true };
+});
+
+ipcMain.handle("bug-report:open-email", async (_, options = {}) => {
+  try {
+    const subject = encodeURIComponent("Time Logger bug report");
+    const body = encodeURIComponent(createBugReportBody(options));
+    await shell.openExternal(`mailto:${BUG_REPORT_EMAIL}?subject=${subject}&body=${body}`);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
 });
 
 ipcMain.handle("secure-store:get-all", async (_, keys = []) => {
@@ -785,6 +1379,217 @@ ipcMain.handle("jira-secure-store:delete", async (_, key) => {
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("tempo-secure-store:get", async () => {
+  try {
+    const values = await getTempoSecureValues();
+    return { ok: true, values: getTempoCredentialsStatus(values) };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("tempo-secure-store:set", async (_, credentials = {}) => {
+  try {
+    assertSecureStoreAvailable();
+
+    if (!credentials || typeof credentials !== "object") {
+      throw new Error("Invalid Tempo credentials");
+    }
+
+    const nextValues = {};
+
+    if (Object.prototype.hasOwnProperty.call(credentials, "tempoApiToken")) {
+      nextValues.tempoApiToken = sanitizeTempoApiToken(credentials.tempoApiToken);
+    }
+
+    Object.keys(nextValues).forEach(assertTempoSecureStoreKey);
+
+    const store = await readSecureStore();
+
+    Object.entries(nextValues).forEach(([key, value]) => {
+      if (value) {
+        store[key] = encryptValue(value);
+      } else {
+        delete store[key];
+      }
+    });
+
+    await writeSecureStore(store);
+
+    const values = await getTempoSecureValues();
+    return { ok: true, values: getTempoCredentialsStatus(values) };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("tempo-secure-store:delete", async (_, key) => {
+  try {
+    assertSecureStoreAvailable();
+
+    const keys = key ? [key] : Array.from(TEMPO_SECURE_STORE_KEYS);
+    keys.forEach(assertTempoSecureStoreKey);
+
+    const store = await readSecureStore();
+    keys.forEach((storeKey) => {
+      delete store[storeKey];
+    });
+
+    await writeSecureStore(store);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
+
+ipcMain.handle("tempo:test-connection", async () => {
+  try {
+    const { tempoApiBaseUrl, authHeader } = await getTempoConnectionDetails();
+    const today = formatTempoDate();
+    const response = await fetch(`${tempoApiBaseUrl}/worklogs?from=${today}&to=${today}&limit=1`, {
+      method: "GET",
+      headers: {
+        Authorization: authHeader,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        success: false,
+        status: response.status,
+        error: await getTempoResponseError(response),
+      };
+    }
+
+    const body = await response.json();
+    return {
+      ok: true,
+      success: true,
+      info: normalizeTempoConnectionInfo(body),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+ipcMain.handle("tempo:sync-worklogs", async (_, entries = []) => {
+  try {
+    if (!Array.isArray(entries)) {
+      throw new Error("Invalid Tempo worklog entries");
+    }
+
+    const { tempoApiBaseUrl, authHeader } = await getTempoConnectionDetails();
+    const limitedEntries = entries.slice(0, MAX_TEMPO_SYNC_ENTRIES);
+    const results = [];
+    let jiraDetailsPromise = null;
+    let currentJiraUserPromise = null;
+
+    const getJiraDetailsForTempo = () => {
+      if (!jiraDetailsPromise) {
+        jiraDetailsPromise = getJiraConnectionDetails();
+      }
+
+      return jiraDetailsPromise;
+    };
+
+    const getCurrentJiraUserForTempo = async () => {
+      if (!currentJiraUserPromise) {
+        currentJiraUserPromise = getJiraDetailsForTempo().then(({ jiraBaseUrl, authHeader: jiraAuthHeader }) =>
+          getJiraCurrentUser(jiraBaseUrl, jiraAuthHeader)
+        );
+      }
+
+      return currentJiraUserPromise;
+    };
+
+    for (const originalEntry of limitedEntries) {
+      let entry = normalizeTempoWorklogEntry(originalEntry);
+
+      if (!entry.valid) {
+        results.push({
+          entryId: entry.id ?? null,
+          success: false,
+          issueId: entry.issueId || null,
+          issueKey: entry.issueKey || "",
+          error: entry.error,
+        });
+        continue;
+      }
+
+      try {
+        entry = await resolveTempoWorklogEntry(
+          entry,
+          getJiraDetailsForTempo,
+          getCurrentJiraUserForTempo
+        );
+
+        if (entry.resolveError) {
+          results.push({
+            entryId: entry.id,
+            success: false,
+            issueId: entry.issueId || null,
+            issueKey: entry.issueKey || "",
+            error: entry.resolveError,
+          });
+          continue;
+        }
+
+        const response = await fetch(`${tempoApiBaseUrl}/worklogs`, {
+          method: "POST",
+          headers: {
+            Authorization: authHeader,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(createTempoWorklogPayload(entry)),
+        });
+
+        if (!response.ok) {
+          results.push({
+            entryId: entry.id,
+            success: false,
+            issueId: entry.issueId || null,
+            issueKey: entry.issueKey || "",
+            status: response.status,
+            error: await getTempoResponseError(response),
+          });
+          continue;
+        }
+
+        const responseBody = await response.json();
+        results.push(normalizeTempoWorklogResult(entry, responseBody));
+      } catch (error) {
+        results.push({
+          entryId: entry.id,
+          success: false,
+          issueId: entry.issueId || null,
+          issueKey: entry.issueKey || "",
+          error: error.message,
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      success: results.every((result) => result.success),
+      results,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      success: false,
+      error: error.message,
+      results: [],
+    };
   }
 });
 
@@ -1326,6 +2131,11 @@ ipcMain.handle("tickets:import-file", async () => {
 });
 
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
+
+  registerAutoUpdaterEvents();
   createWindow();
   createTray();
   registerShortcuts();

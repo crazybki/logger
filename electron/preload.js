@@ -6,10 +6,17 @@ const makeShortcutListener = (channel) => (callback) => {
   return () => ipcRenderer.removeListener(channel, handler);
 };
 
+const makePayloadListener = (channel) => (callback) => {
+  const handler = (_event, payload) => callback(payload);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+};
+
 contextBridge.exposeInMainWorld("loggerAPI", {
   exportEntriesToCSV: (entries) => ipcRenderer.invoke("log:export-entries", entries),
   importTicketsFromFile: () => ipcRenderer.invoke("tickets:import-file"),
   showNotification: (options) => ipcRenderer.invoke("notification:show", options),
+  openBugReportEmail: (options) => ipcRenderer.invoke("bug-report:open-email", options),
   secureStoreGetAll: (keys) => ipcRenderer.invoke("secure-store:get-all", keys),
   secureStoreSet: (key, value) => ipcRenderer.invoke("secure-store:set", key, value),
   secureStoreDelete: (key) => ipcRenderer.invoke("secure-store:delete", key),
@@ -20,6 +27,13 @@ contextBridge.exposeInMainWorld("loggerAPI", {
   jiraSyncWorklogs: (entries) => ipcRenderer.invoke("jira:sync-worklogs", entries),
   jiraListProjects: () => ipcRenderer.invoke("jira:list-projects"),
   jiraFetchTickets: (options) => ipcRenderer.invoke("jira:fetch-tickets", options),
+  tempoGetStatus: () => ipcRenderer.invoke("tempo-secure-store:get"),
+  tempoSaveCredentials: (credentials) => ipcRenderer.invoke("tempo-secure-store:set", credentials),
+  tempoClearCredentials: () => ipcRenderer.invoke("tempo-secure-store:delete"),
+  tempoTestConnection: () => ipcRenderer.invoke("tempo:test-connection"),
+  tempoSyncWorklogs: (entries) => ipcRenderer.invoke("tempo:sync-worklogs", entries),
+  checkForUpdates: () => ipcRenderer.invoke("updates:check"),
+  quitAndInstallUpdate: () => ipcRenderer.invoke("updates:quit-and-install"),
 
   setMiniMode: (isMini) => ipcRenderer.send("window:set-mini-mode", isMini),
   minimizeWindow: () => ipcRenderer.send("window:minimize"),
@@ -31,4 +45,5 @@ contextBridge.exposeInMainWorld("loggerAPI", {
   onToggleMiniMode: makeShortcutListener("tray:toggle-mini-mode"),
   onPowerResume: makeShortcutListener("power:resume"),
   onPowerSuspend: makeShortcutListener("power:suspend"),
+  onUpdateStatus: makePayloadListener("updates:status"),
 });

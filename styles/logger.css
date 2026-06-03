@@ -470,6 +470,49 @@ body {
     padding: 0 11px;
 }
 
+.quick-ticket-suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.quick-ticket-suggestions button {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid var(--theme-border);
+    border-radius: 7px;
+    color: var(--theme-text);
+    cursor: pointer;
+    display: grid;
+    gap: 6px;
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 30px;
+    padding: 6px 8px;
+    text-align: left;
+    width: 100%;
+}
+
+.quick-ticket-suggestions button:hover {
+    border-color: rgba(74, 158, 255, 0.45);
+}
+
+.quick-ticket-suggestions strong {
+    color: #b9d8ff;
+    font-size: 11px;
+    font-weight: 900;
+}
+
+.quick-ticket-suggestions span {
+    color: var(--theme-muted);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .todo-filter-tabs {
     display: grid;
     gap: 5px;
@@ -2117,6 +2160,64 @@ body {
     opacity: 0.58;
 }
 
+.tempo-sync-results {
+    border-top: 1px solid var(--theme-border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 10px;
+}
+
+.tempo-sync-results ul {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.tempo-sync-results li {
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid var(--theme-border);
+    border-radius: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px;
+}
+
+.tempo-sync-results li.success {
+    border-color: rgba(76, 175, 80, 0.24);
+}
+
+.tempo-sync-results li.failed {
+    border-color: rgba(196, 127, 122, 0.28);
+}
+
+.tempo-sync-results span {
+    color: var(--theme-muted);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.tempo-sync-results strong,
+.tempo-sync-results p {
+    color: var(--theme-text);
+    font-size: 11px;
+    line-height: 1.35;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.tempo-sync-results li.success strong {
+    color: var(--theme-green);
+}
+
+.tempo-sync-results li.failed strong {
+    color: #e09992;
+}
+
 .jira-ticket-tools {
     border-top: 1px solid var(--theme-border);
     display: flex;
@@ -2219,6 +2320,19 @@ body {
     color: #667;
     cursor: not-allowed;
     opacity: 0.58;
+}
+
+.bug-report-btn {
+    background: var(--theme-purple-soft);
+    border: 1px solid var(--theme-border);
+    border-radius: 7px;
+    color: var(--theme-text);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 900;
+    height: 34px;
+    padding: 0 12px;
+    width: fit-content;
 }
 
 .reports-toolbar {

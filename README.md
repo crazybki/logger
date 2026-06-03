@@ -142,6 +142,19 @@ Sikkerhetsmekanismene er:
 - Hvis secure store-filen likevel er korrupt, tar appen backup og starter med en tom secure store.
 - Synkroniserte entries merkes med `jiraWorklogId`, `jiraWorklogSelf` og `jiraSyncedAt`, slik at samme entry ikke synkes flere ganger.
 
+- ## Jira Authentication Model
+
+Time Logger uses Jira Cloud API tokens.
+
+Authentication flow:
+
+1. User creates a Jira API token in Atlassian.
+2. User enters URL, email and token in Time Logger.
+3. Token is transferred once to Electron main process.
+4. Token is encrypted using Electron safeStorage.
+5. Token is never returned to renderer.
+6. Jira API calls are executed exclusively from Electron main process.
+
 ## Vanlige problemer
 
 Hvis `npm` eller `node` ikke finnes, installer Node.js LTS og åpne et nytt PowerShell-vindu.

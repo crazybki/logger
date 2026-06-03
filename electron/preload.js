@@ -6,6 +6,12 @@ const makeShortcutListener = (channel) => (callback) => {
   return () => ipcRenderer.removeListener(channel, handler);
 };
 
+const makePayloadListener = (channel) => (callback) => {
+  const handler = (_event, payload) => callback(payload);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+};
+
 contextBridge.exposeInMainWorld("loggerAPI", {
   exportEntriesToCSV: (entries) => ipcRenderer.invoke("log:export-entries", entries),
   importTicketsFromFile: () => ipcRenderer.invoke("tickets:import-file"),
@@ -26,6 +32,8 @@ contextBridge.exposeInMainWorld("loggerAPI", {
   tempoClearCredentials: () => ipcRenderer.invoke("tempo-secure-store:delete"),
   tempoTestConnection: () => ipcRenderer.invoke("tempo:test-connection"),
   tempoSyncWorklogs: (entries) => ipcRenderer.invoke("tempo:sync-worklogs", entries),
+  checkForUpdates: () => ipcRenderer.invoke("updates:check"),
+  quitAndInstallUpdate: () => ipcRenderer.invoke("updates:quit-and-install"),
 
   setMiniMode: (isMini) => ipcRenderer.send("window:set-mini-mode", isMini),
   minimizeWindow: () => ipcRenderer.send("window:minimize"),
@@ -37,4 +45,5 @@ contextBridge.exposeInMainWorld("loggerAPI", {
   onToggleMiniMode: makeShortcutListener("tray:toggle-mini-mode"),
   onPowerResume: makeShortcutListener("power:resume"),
   onPowerSuspend: makeShortcutListener("power:suspend"),
+  onUpdateStatus: makePayloadListener("updates:status"),
 });

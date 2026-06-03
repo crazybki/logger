@@ -16,11 +16,15 @@ const path = require("path");
 const fs = require("fs");
 const { pathToFileURL } = require("url");
 const XLSX = require("xlsx");
+const { autoUpdater } = require("electron-updater");
 
 let mainWindow;
 let tray;
 let isQuitting = false;
 let secureStoreWriteQueue = Promise.resolve();
+let updateCheckPromise = null;
+let isUpdateDownloaded = false;
+let hasStartedUpdateCheck = false;
 
 const NORMAL_SIZE = { width: 400, height: 700 };
 const MINI_SIZE = { width: 420, height: 305 };
@@ -53,6 +57,8 @@ const TEMPO_SECURE_STORE_KEYS = new Set([
 ]);
 const DEV_SERVER_URL = "http://localhost:5173";
 
+autoUpdater.autoDownload = true;
+
 if (process.platform === "win32") {
   app.setAppUserModelId("com.attensi.timelogger");
 }
@@ -81,6 +87,112 @@ function showMainWindow() {
 function sendRendererAction(channel) {
   showMainWindow();
   mainWindow?.webContents.send(channel);
+}
+
+function sanitizeUpdateInfo(info = {}) {
+  return {
+    version: truncateText(info.version, 80),
+    releaseName: truncateText(info.releaseName, 160),
+    releaseDate: truncateText(info.releaseDate, 80),
+  };
+}
+
+function sanitizeDownloadProgress(progress = {}) {
+  const percent = Number(progress.percent);
+  const bytesPerSecond = Number(progress.bytesPerSecond);
+  const transferred = Number(progress.transferred);
+  const total = Number(progress.total);
+
+  return {
+    percent: Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : 0,
+    bytesPerSecond: Number.isFinite(bytesPerSecond) ? Math.max(0, bytesPerSecond) : 0,
+    transferred: Number.isFinite(transferred) ? Math.max(0, transferred) : 0,
+    total: Number.isFinite(total) ? Math.max(0, total) : 0,
+  };
+}
+
+function sendUpdateStatus(status, payload = {}) {
+  mainWindow?.webContents.send("updates:status", {
+    status,
+    ...payload,
+  });
+}
+
+function registerAutoUpdaterEvents() {
+  autoUpdater.on("checking-for-update", () => {
+    sendUpdateStatus("checking");
+  });
+
+  autoUpdater.on("update-available", (info) => {
+    isUpdateDownloaded = false;
+    sendUpdateStatus("update-available", {
+      update: sanitizeUpdateInfo(info),
+    });
+  });
+
+  autoUpdater.on("update-not-available", (info) => {
+    sendUpdateStatus("update-not-available", {
+      update: sanitizeUpdateInfo(info),
+    });
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    sendUpdateStatus("download-progress", {
+      progress: sanitizeDownloadProgress(progress),
+    });
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    isUpdateDownloaded = true;
+    sendUpdateStatus("update-downloaded", {
+      update: sanitizeUpdateInfo(info),
+    });
+  });
+
+  autoUpdater.on("error", (error) => {
+    sendUpdateStatus("error", {
+      error: truncateText(error?.message || "Update failed", MAX_NOTIFICATION_LENGTH),
+    });
+  });
+}
+
+async function checkForUpdates() {
+  if (!app.isPackaged) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "Updates are only checked in packaged builds.",
+    };
+  }
+
+  if (updateCheckPromise) {
+    return updateCheckPromise;
+  }
+
+  updateCheckPromise = autoUpdater.checkForUpdates()
+    .then(() => ({ ok: true }))
+    .catch((error) => {
+      sendUpdateStatus("error", {
+        error: truncateText(error?.message || "Update failed", MAX_NOTIFICATION_LENGTH),
+      });
+
+      return {
+        ok: false,
+        error: truncateText(error?.message || "Update failed", MAX_NOTIFICATION_LENGTH),
+      };
+    })
+    .finally(() => {
+      updateCheckPromise = null;
+    });
+
+  return updateCheckPromise;
+}
+
+function checkForUpdatesAtStartup() {
+  if (hasStartedUpdateCheck) return;
+
+  hasStartedUpdateCheck = true;
+  checkForUpdates();
 }
 
 function createTray() {
@@ -1050,6 +1162,8 @@ function createWindow() {
     event.preventDefault();
   });
 
+  mainWindow.webContents.once("did-finish-load", checkForUpdatesAtStartup);
+
   if (isDev) {
     mainWindow.loadURL(DEV_SERVER_URL);
   } else {
@@ -1105,6 +1219,21 @@ ipcMain.on("window:minimize", () => {
 
 ipcMain.on("window:close", () => {
   mainWindow?.close();
+});
+
+ipcMain.handle("updates:check", () => checkForUpdates());
+
+ipcMain.handle("updates:quit-and-install", () => {
+  if (!isUpdateDownloaded) {
+    return {
+      ok: false,
+      error: "No downloaded update is ready to install.",
+    };
+  }
+
+  isQuitting = true;
+  autoUpdater.quitAndInstall(false, true);
+  return { ok: true };
 });
 
 ipcMain.handle("notification:show", (_, options = {}) => {
@@ -2006,6 +2135,7 @@ app.whenReady().then(() => {
     callback(false);
   });
 
+  registerAutoUpdaterEvents();
   createWindow();
   createTray();
   registerShortcuts();

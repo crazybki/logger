@@ -27,6 +27,7 @@ const SECURE_STORE_KEYS = [
   "countdownResetDate",
 ];
 const DEMO_TICKET_IDS = new Set(["ABC-123", "ABC-456", "ABC-789", "ABC-321", "ABC-654"]);
+const SHOW_COUNTDOWN_SECTION = false;
 
 const UI_TEXT = {
   no: {
@@ -4945,7 +4946,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             </>
           )}
 
-          {false && !showManualModal && (
+          {SHOW_COUNTDOWN_SECTION && !showManualModal && (
             <section className="section">
               <div className="countdown-label">Remaining today</div>
               <div className={`countdown-timer ${countdownPulse ? "pulse" : ""}`}>

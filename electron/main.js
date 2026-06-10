@@ -15,7 +15,6 @@ const {
 const path = require("path");
 const fs = require("fs");
 const { pathToFileURL } = require("url");
-const XLSX = require("xlsx");
 const { autoUpdater } = require("electron-updater");
 
 let mainWindow;
@@ -1913,21 +1912,6 @@ function todayDateKey() {
 }
 
 function normalizeImportDate(value) {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().slice(0, 10);
-  }
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (parsed) {
-      return [
-        String(parsed.y).padStart(4, "0"),
-        String(parsed.m).padStart(2, "0"),
-        String(parsed.d).padStart(2, "0"),
-      ].join("-");
-    }
-  }
-
   const raw = truncateText(value, 80);
   if (!raw) return todayDateKey();
 
@@ -2098,8 +2082,7 @@ ipcMain.handle("tickets:import-file", async () => {
     title: "Import tickets",
     properties: ["openFile"],
     filters: [
-      { name: "Excel, CSV or Text", extensions: ["xlsx", "xls", "csv", "txt"] },
-      { name: "All Files", extensions: ["*"] },
+      { name: "CSV, TSV or Text", extensions: ["csv", "tsv", "txt"] },
     ],
   });
 
@@ -2112,19 +2095,11 @@ ipcMain.handle("tickets:import-file", async () => {
     const extension = path.extname(filePath).toLowerCase();
     ensureImportFileAllowed(filePath);
 
-    if (extension === ".txt") {
+    if ([".csv", ".tsv", ".txt"].includes(extension)) {
       return { ok: true, ...parseTextTickets(filePath), filePath };
     }
 
-    const workbook = XLSX.readFile(filePath);
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }).slice(0, MAX_IMPORT_ROWS);
-
-    if (!rows.length) {
-      return { ok: true, tickets: [], entries: [], filePath };
-    }
-
-    return { ok: true, ...parseTicketRows(rows), filePath };
+    throw new Error("Unsupported import file type");
   } catch (error) {
     return { ok: false, error: error.message };
   }

@@ -3207,7 +3207,7 @@ function Logger() {
         <div className="import-guide-header">
           <div>
             <h2>Import format</h2>
-            <p>Excel, CSV og TXT støttes</p>
+            <p>CSV, TSV og TXT støttes</p>
           </div>
           <button type="button" onClick={() => setShowImportGuide(false)} aria-label="Close import guide">
             <Icon name="close" size={13} />

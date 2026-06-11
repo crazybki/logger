@@ -27,6 +27,7 @@ const SECURE_STORE_KEYS = [
   "countdownResetDate",
 ];
 const DEMO_TICKET_IDS = new Set(["ABC-123", "ABC-456", "ABC-789", "ABC-321", "ABC-654"]);
+const SHOW_COUNTDOWN_SECTION = false;
 
 const UI_TEXT = {
   no: {
@@ -3206,7 +3207,7 @@ function Logger() {
         <div className="import-guide-header">
           <div>
             <h2>Import format</h2>
-            <p>Excel, CSV og TXT støttes</p>
+            <p>CSV, TSV og TXT støttes</p>
           </div>
           <button type="button" onClick={() => setShowImportGuide(false)} aria-label="Close import guide">
             <Icon name="close" size={13} />
@@ -4945,7 +4946,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             </>
           )}
 
-          {false && !showManualModal && (
+          {SHOW_COUNTDOWN_SECTION && !showManualModal && (
             <section className="section">
               <div className="countdown-label">Remaining today</div>
               <div className={`countdown-timer ${countdownPulse ? "pulse" : ""}`}>

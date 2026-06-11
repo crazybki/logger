@@ -115,7 +115,7 @@ export function SettingsView({
         selectedProjects: "Selected projects",
         support: "Support",
         bugReport: "Bug report",
-        bugReportHelp: "Open your email app with a prepared bug report template.",
+        bugReportHelp: "Open the GitHub bug report template in your browser.",
         openBugReport: "Report bug",
       }
     : {
@@ -185,7 +185,7 @@ export function SettingsView({
         selectedProjects: "Valgte prosjekter",
         support: "Support",
         bugReport: "Bugrapport",
-        bugReportHelp: "Åpne e-postappen med en ferdig mal for bugrapport.",
+        bugReportHelp: "Åpne GitHub-malen for bugrapport i nettleseren.",
         openBugReport: "Rapporter bug",
       };
   const initialTarget = secondsToParts(dailyTargetSeconds);

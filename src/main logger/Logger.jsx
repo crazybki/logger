@@ -2789,27 +2789,24 @@ function Logger() {
   }
 
   async function handleOpenBugReport() {
-    if (!window.loggerAPI?.openBugReportEmail) {
+    if (!window.loggerAPI?.openBugReportIssue) {
       setMessage("Bug reporting is not available");
       return;
     }
 
     try {
-      const result = await window.loggerAPI.openBugReportEmail({
-        language: appLanguage,
-        theme: themePreset,
-      });
+      const result = await window.loggerAPI.openBugReportIssue();
 
       if (!result?.ok) {
-        setMessage(result?.error || "Could not open email app");
+        setMessage(result?.error || "Could not open bug report template");
         return;
       }
 
       setMessageTone("success");
-      setMessage("Bug report email opened");
+      setMessage("Bug report template opened");
     } catch (error) {
-      console.error("Could not open bug report email:", error);
-      setMessage("Could not open email app");
+      console.error("Could not open bug report template:", error);
+      setMessage("Could not open bug report template");
     }
   }
 

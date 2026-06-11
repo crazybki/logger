@@ -36,7 +36,7 @@ const MAX_JIRA_SYNC_ENTRIES = 100;
 const MAX_TEMPO_SYNC_ENTRIES = 100;
 const MAX_JIRA_PROJECTS = 100;
 const MAX_JIRA_FETCH_TICKETS = 100;
-const BUG_REPORT_EMAIL = "support@example.com";
+const BUG_REPORT_URL = "https://github.com/crazybki/logger/issues/new/choose";
 const TEMPO_API_BASE_URL = "https://api.tempo.io/4";
 const SECURE_STORE_KEYS = new Set([
   "timeEntries",
@@ -462,31 +462,6 @@ function normalizeJiraUserInfo(user = {}) {
     emailAddress: truncateText(user.emailAddress, 300),
     active: Boolean(user.active),
   };
-}
-
-function createBugReportBody(options = {}) {
-  const appVersion = truncateText(app.getVersion(), 80);
-  const language = truncateText(options.language, 40) || "unknown";
-  const theme = truncateText(options.theme, 80) || "unknown";
-
-  return [
-    `App version: ${appVersion}`,
-    `Platform: ${process.platform} ${process.arch}`,
-    `Electron: ${process.versions.electron}`,
-    `Timestamp: ${new Date().toISOString()}`,
-    `Language: ${language}`,
-    `Theme: ${theme}`,
-    "",
-    "What is wrong?",
-    "",
-    "",
-    "What error message do you get?",
-    "",
-    "",
-    "When does this happen in the app?",
-    "",
-    "",
-  ].join("\n");
 }
 
 function padDatePart(value, size = 2) {
@@ -1253,11 +1228,9 @@ ipcMain.handle("notification:show", (_, options = {}) => {
   return { ok: true };
 });
 
-ipcMain.handle("bug-report:open-email", async (_, options = {}) => {
+ipcMain.handle("bug-report:open-issue-template", async () => {
   try {
-    const subject = encodeURIComponent("Time Logger bug report");
-    const body = encodeURIComponent(createBugReportBody(options));
-    await shell.openExternal(`mailto:${BUG_REPORT_EMAIL}?subject=${subject}&body=${body}`);
+    await shell.openExternal(BUG_REPORT_URL);
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error.message };

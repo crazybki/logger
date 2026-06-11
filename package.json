@@ -10,6 +10,7 @@
     "build": "vite build",
     "dist": "npm run build && electron-builder",
     "lint": "eslint .",
+    "test": "vitest run",
     "audit": "npm audit --audit-level=high",
     "audit:prod": "npm audit --omit=dev --audit-level=high"
   },
@@ -29,7 +30,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
-    "vite": "^8.0.1"
+    "vite": "^8.0.1",
+    "vitest": "^4.1.8"
   },
   "build": {
     "appId": "com.attensi.timelogger",

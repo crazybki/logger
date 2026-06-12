@@ -51,6 +51,8 @@ const UI_TEXT = {
     tasksOnly: "Kun tasks",
     allActive: "Alle aktive",
     copyJira: "Kopier Jira",
+    copyHandover: "Kopier handover",
+    handover: "Handover",
     preview: "Preview",
     noEntriesPreset: "Ingen entries i valgt preset",
     all: "All",
@@ -98,6 +100,8 @@ const UI_TEXT = {
     tasksOnly: "Tasks only",
     allActive: "All active",
     copyJira: "Copy Jira",
+    copyHandover: "Copy handover",
+    handover: "Handover",
     preview: "Preview",
     noEntriesPreset: "No entries in selected preset",
     all: "All",
@@ -144,7 +148,6 @@ function Logger() {
   const [missingTimeFilter, setMissingTimeFilter] = useState("missing");
   const [trashTab, setTrashTab] = useState("tickets");
   const [trashSearch, setTrashSearch] = useState("");
-  const [quickCaptureType, setQuickCaptureType] = useState("task");
   const [quickCaptureText, setQuickCaptureText] = useState("");
   const [todoFilter, setTodoFilter] = useState("all");
   const [dismissedLongTimerId, setDismissedLongTimerId] = useState(null);
@@ -303,6 +306,11 @@ function Logger() {
   const [editHours, setEditHours] = useState("");
   const [editMinutes, setEditMinutes] = useState("");
   const [editFocused, setEditFocused] = useState(null);
+  const [handoverEntryId, setHandoverEntryId] = useState(null);
+  const [handoverStatus, setHandoverStatus] = useState("");
+  const [handoverWorkCompleted, setHandoverWorkCompleted] = useState("");
+  const [handoverNextSteps, setHandoverNextSteps] = useState("");
+  const [handoverEditMode, setHandoverEditMode] = useState(false);
 
   const text = UI_TEXT[appLanguage] || UI_TEXT.no;
 
@@ -370,6 +378,26 @@ function Logger() {
     );
   }
 
+  function mergeHandoverText(currentValue, nextValue) {
+    const current = String(currentValue || "").trim();
+    const next = String(nextValue || "").trim();
+
+    if (!current) return next;
+    if (!next || current === next) return current;
+    return `${current}\n${next}`;
+  }
+
+  function mergeHandoverFields(targetEntry, sourceEntry) {
+    return {
+      handoverStatus: mergeHandoverText(targetEntry.handoverStatus, sourceEntry.handoverStatus),
+      handoverWorkCompleted: mergeHandoverText(
+        targetEntry.handoverWorkCompleted,
+        sourceEntry.handoverWorkCompleted
+      ),
+      handoverNextSteps: mergeHandoverText(targetEntry.handoverNextSteps, sourceEntry.handoverNextSteps),
+    };
+  }
+
   function mergeCompletedTicketEntry(entryList, entryId) {
     const completedEntry = entryList.find((entry) => entry.id === entryId);
     if (!canMergeTicketEntry(completedEntry)) return entryList;
@@ -387,7 +415,11 @@ function Logger() {
     return entryList
       .map((entry) =>
         entry.id === targetEntry.id
-          ? { ...entry, seconds: entry.seconds + completedEntry.seconds }
+          ? {
+            ...entry,
+            seconds: entry.seconds + completedEntry.seconds,
+            ...mergeHandoverFields(entry, completedEntry),
+          }
           : entry
       )
       .filter((entry) => entry.id !== entryId);
@@ -405,7 +437,11 @@ function Logger() {
 
     return entryList.map((entry) =>
       entry.id === targetEntry.id
-        ? { ...entry, seconds: entry.seconds + newEntry.seconds }
+        ? {
+          ...entry,
+          seconds: entry.seconds + newEntry.seconds,
+          ...mergeHandoverFields(entry, newEntry),
+        }
         : entry
     );
   }
@@ -665,9 +701,9 @@ function Logger() {
   }, [jiraTickets, manualEntryType, manualTicket]);
 
   const quickCaptureTicketSuggestions = useMemo(() => {
-    if (quickCaptureType !== "ticket") return [];
+    if (!quickCaptureText.trim()) return [];
     return getMatchingJiraTickets(quickCaptureText).slice(0, 5);
-  }, [jiraTickets, quickCaptureText, quickCaptureType]);
+  }, [jiraTickets, quickCaptureText]);
 
   const favoriteTickets = useMemo(() => {
     return jiraTickets.filter((ticket) => ticket.favorite);
@@ -1246,11 +1282,30 @@ function Logger() {
   useEffect(() => {
     function handleKeyDown(e) {
       const key = e.key.toLowerCase();
-      const tag = e.target.tagName;
+      const tag = e.target?.tagName;
       const isTyping =
         tag === "INPUT" ||
         tag === "TEXTAREA" ||
         e.target.isContentEditable;
+
+      if (handoverEntryId != null) {
+        if (key === "escape") {
+          e.preventDefault();
+          if (handoverEditMode && hasHandoverNotes({
+            handoverStatus,
+            handoverWorkCompleted,
+            handoverNextSteps,
+          })) {
+            setHandoverEditMode(false);
+          } else {
+            closeHandoverEntry();
+          }
+        }
+
+        return;
+      }
+
+      if (isTyping) return;
 
       if ((e.ctrlKey || e.metaKey) && key === "z" && !e.shiftKey && !isTyping && lastMergeUndo) {
         e.preventDefault();
@@ -1324,8 +1379,6 @@ function Logger() {
         return;
       }
 
-      if (isTyping) return;
-
       if (key === "?") {
         e.preventDefault();
         setShowShortcuts((prev) => !prev);
@@ -1390,7 +1443,7 @@ function Logger() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeEntryId, selectedTicket, showManualModal, isMiniMode, activeEntry, showShortcuts, miniTicket, lastMergeUndo, showReminderInbox, showEndDayView, showExportView]);
+  }, [activeEntryId, selectedTicket, showManualModal, isMiniMode, activeEntry, showShortcuts, miniTicket, lastMergeUndo, showReminderInbox, showEndDayView, showExportView, handoverEntryId, handoverEditMode, handoverStatus, handoverWorkCompleted, handoverNextSteps]);
 
   useEffect(() => {
     if (!window.loggerAPI) return;
@@ -1547,6 +1600,130 @@ function Logger() {
       seconds: entry.seconds + elapsedSeconds,
       lastTickAt: lastTickAt + elapsedSeconds * 1000,
     };
+  }
+
+  function hasHandoverNotes(entry) {
+    return Boolean(
+      String(entry?.handoverStatus || "").trim() ||
+      String(entry?.handoverWorkCompleted || "").trim() ||
+      String(entry?.handoverNextSteps || "").trim()
+    );
+  }
+
+  function formatHandoverList(value) {
+    return getHandoverListItems(value).map((line) => `- ${line}`);
+  }
+
+  function getHandoverListItems(value) {
+    return String(value || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/^[-*]\s*/, ""));
+  }
+
+  function getHandoverPreview(entryOrDraft = {}) {
+    const ticketName = String(entryOrDraft.ticketName || "").trim() || "Ticket";
+    const status = String(entryOrDraft.handoverStatus || "").trim();
+    const workCompleted = formatHandoverList(entryOrDraft.handoverWorkCompleted);
+    const nextSteps = formatHandoverList(entryOrDraft.handoverNextSteps);
+
+    return [
+      ticketName,
+      "",
+      "Status:",
+      status,
+      "",
+      "Work completed:",
+      ...workCompleted,
+      "",
+      "Next steps:",
+      ...nextSteps,
+    ].join("\n").trimEnd();
+  }
+
+  function getHandoverDraftPreview() {
+    const entry = entries.find((item) => item.id === handoverEntryId);
+
+    return getHandoverPreview({
+      ticketName: entry?.ticketName,
+      handoverStatus,
+      handoverWorkCompleted,
+      handoverNextSteps,
+    });
+  }
+
+  function openHandoverEntry(entry) {
+    if (!entry) return;
+
+    setHandoverEntryId(entry.id);
+    setHandoverStatus(entry.handoverStatus || "");
+    setHandoverWorkCompleted(entry.handoverWorkCompleted || "");
+    setHandoverNextSteps(entry.handoverNextSteps || "");
+    setHandoverEditMode(!hasHandoverNotes(entry));
+  }
+
+  function closeHandoverEntry() {
+    setHandoverEntryId(null);
+    setHandoverStatus("");
+    setHandoverWorkCompleted("");
+    setHandoverNextSteps("");
+    setHandoverEditMode(false);
+  }
+
+  function saveHandoverEntry() {
+    if (handoverEntryId == null) return;
+
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === handoverEntryId
+          ? {
+            ...entry,
+            handoverStatus: handoverStatus.trim(),
+            handoverWorkCompleted: handoverWorkCompleted.trim(),
+            handoverNextSteps: handoverNextSteps.trim(),
+          }
+          : entry
+      )
+    );
+  }
+
+  function updateHandoverField(fieldName, value) {
+    if (fieldName === "handoverStatus") setHandoverStatus(value);
+    if (fieldName === "handoverWorkCompleted") setHandoverWorkCompleted(value);
+    if (fieldName === "handoverNextSteps") setHandoverNextSteps(value);
+
+    if (handoverEntryId == null) return;
+
+    setEntries((prev) =>
+      prev.map((entry) =>
+        entry.id === handoverEntryId
+          ? {
+            ...entry,
+            [fieldName]: value,
+          }
+          : entry
+      )
+    );
+  }
+
+  async function handleCopyHandover() {
+    const preview = getHandoverDraftPreview();
+
+    if (!preview.trim()) {
+      setMessage("No handover to copy");
+      return;
+    }
+
+    try {
+      saveHandoverEntry();
+      await navigator.clipboard.writeText(preview);
+      setMessageTone("success");
+      setMessage("Copied handover");
+    } catch (error) {
+      console.error("Could not copy handover:", error);
+      setMessage("Could not copy handover");
+    }
   }
 
   function syncRunningEntries(timestamp = Date.now()) {
@@ -2940,38 +3117,6 @@ function Logger() {
     setMessage("Entry updated");
   }
 
-  function handleQuickCaptureSubmit() {
-    const value = quickCaptureText.trim();
-
-    if (!value) {
-      setMessage(quickCaptureType === "task" ? "Skriv inn en task" : "Skriv inn en ticket");
-      return;
-    }
-
-    if (quickCaptureType === "task") {
-      const timestamp = Date.now();
-      setTodoTasks((prev) => [
-        {
-          id: timestamp,
-          title: value,
-          priority: "normal",
-          reminder: getDefaultTodoReminder(),
-          notes: "",
-          sourceTicket: selectedTicket || activeEntry?.ticketName || "",
-          done: false,
-          createdAt: new Date(timestamp).toISOString(),
-        },
-        ...prev,
-      ]);
-      setMessageTone("success");
-      setMessage("Task lagt til");
-    } else {
-      startEntry(value);
-    }
-
-    setQuickCaptureText("");
-  }
-
   function getExportEntriesForPreset(preset = exportPreset) {
     const weekdayKeys = new Set(getCurrentWeekdayKeys());
 
@@ -4345,6 +4490,137 @@ PROJ-456;2026-05-11;2t`}</pre>
     </section>
   );
 
+  const handoverEntry = entries.find((entry) => entry.id === handoverEntryId) || null;
+  const handoverWorkItems = getHandoverListItems(handoverWorkCompleted);
+  const handoverNextItems = getHandoverListItems(handoverNextSteps);
+
+  const handoverSection = handoverEntry && (
+    <section className="section manual-entry-top handover-panel">
+      {!handoverEditMode ? (
+        <div className="handover-note-card">
+          <div className="handover-note-header">
+            <div className="handover-note-title">
+              <span className="handover-note-icon">
+                <Icon name="todo" size={14} />
+              </span>
+              <div>
+                <strong>{text.handover}</strong>
+                <span>{handoverEntry.ticketName}</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="handover-note-close"
+              onClick={closeHandoverEntry}
+              title="Close"
+            >
+              v
+            </button>
+          </div>
+
+          <div className="handover-note-list">
+            {handoverStatus.trim() && (
+              <div className="handover-note-row status">
+                <span className="handover-note-marker" />
+                <span>{handoverStatus.trim()}</span>
+              </div>
+            )}
+
+            {handoverWorkItems.map((item, index) => (
+              <div key={`work-${index}`} className="handover-note-row work">
+                <span className="handover-note-marker">::</span>
+                <span>{item}</span>
+              </div>
+            ))}
+
+            {handoverNextItems.map((item, index) => (
+              <div key={`next-${index}`} className="handover-note-row next">
+                <span className="handover-note-marker">-&gt;</span>
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="handover-note-actions">
+            <button
+              type="button"
+              onClick={handleCopyHandover}
+              title={text.copyHandover}
+            >
+              <Icon name="export" size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setHandoverEditMode(true)}
+              title="Edit"
+            >
+              <Icon name="edit" size={13} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="modal-header handover-edit-header">
+            <div>
+              <h2>{text.handover}</h2>
+              <p>{handoverEntry.ticketName}</p>
+            </div>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setHandoverEditMode(false)}
+            >
+              <Icon name="close" size={13} />
+            </button>
+          </div>
+
+          <div className="handover-form">
+            <label className="manual-field">
+              <span className="manual-field-label">Status</span>
+              <input
+                type="text"
+                value={handoverStatus}
+                onChange={(event) => updateHandoverField("handoverStatus", event.target.value)}
+                placeholder="Waiting for customer response"
+              />
+            </label>
+
+            <label className="manual-field">
+              <span className="manual-field-label">Work completed</span>
+              <textarea
+                value={handoverWorkCompleted}
+                onChange={(event) => updateHandoverField("handoverWorkCompleted", event.target.value)}
+                placeholder={"Investigated logs\nTested workaround"}
+                rows={3}
+              />
+            </label>
+
+            <label className="manual-field">
+              <span className="manual-field-label">Next steps</span>
+              <textarea
+                value={handoverNextSteps}
+                onChange={(event) => updateHandoverField("handoverNextSteps", event.target.value)}
+                placeholder="Customer verification pending"
+                rows={2}
+              />
+            </label>
+
+            <div className="modal-actions handover-actions">
+              <button
+                type="button"
+                className="manual-entry-save"
+                onClick={handleCopyHandover}
+              >
+                <Icon name="export" size={13} color="#fff" />
+                {text.copyHandover}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+
   if (isMiniMode) {
     return (
       <>
@@ -4553,6 +4829,17 @@ PROJ-456;2026-05-11;2t`}</pre>
               <span>Edit entry</span>
             </button>
 
+            <button
+              type="button"
+              onClick={() => {
+                openHandoverEntry(todoContextMenu.entry);
+                setTodoContextMenu(null);
+              }}
+            >
+              <Icon name="todo" size={13} />
+              <span>{text.handover}</span>
+            </button>
+
             <button type="button" onClick={() => openTodoFromTicket(todoContextMenu.entry)}>
               <Icon name="todo" size={13} />
               <span>Legg til som task</span>
@@ -4715,45 +5002,49 @@ PROJ-456;2026-05-11;2t`}</pre>
 
           {editEntrySection}
 
+          {handoverSection}
+
           {showManualModal && manualSection}
 
-          {!showManualModal && !editingEntryId && (
+          {!showManualModal && !editingEntryId && !handoverEntryId && (
             <>
               <section className="section quick-capture-card">
-                <div className="quick-capture-toggle" role="group" aria-label="Quick capture type">
-                  <button
-                    type="button"
-                    className={quickCaptureType === "task" ? "active" : ""}
-                    onClick={() => setQuickCaptureType("task")}
-                  >
-                    Task
-                  </button>
-                  <button
-                    type="button"
-                    className={quickCaptureType === "ticket" ? "active" : ""}
-                    onClick={() => setQuickCaptureType("ticket")}
-                  >
-                    Ticket
-                  </button>
+                <div className="quick-capture-label">
+                  <Icon name="ticket" size={14} />
+                  <span>Ticket</span>
                 </div>
 
                 <form
                   className="quick-capture-form"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    handleQuickCaptureSubmit();
+                    startEntry(quickCaptureText);
+                    setQuickCaptureText("");
                   }}
                 >
-                  <input
-                    ref={quickCaptureRef}
-                    type="text"
-                    value={quickCaptureText}
-                    onChange={(event) => setQuickCaptureText(event.target.value)}
-                    placeholder={quickCaptureType === "task" ? text.newTaskPlaceholder : text.startTicketPlaceholder}
-                  />
+                  <div className="quick-capture-input-wrap">
+                    <Icon name="ticket" size={13} />
+                    <input
+                      ref={quickCaptureRef}
+                      type="text"
+                      value={quickCaptureText}
+                      onChange={(event) => setQuickCaptureText(event.target.value)}
+                      placeholder={text.startTicketPlaceholder}
+                    />
+                    {quickCaptureText && (
+                      <button
+                        type="button"
+                        className="quick-capture-clear"
+                        onClick={() => setQuickCaptureText("")}
+                        title="Clear ticket"
+                      >
+                        <Icon name="close" size={11} />
+                      </button>
+                    )}
+                  </div>
                   <button type="submit">
-                    <Icon name={quickCaptureType === "task" ? "plus" : "play"} size={12} />
-                    <span>{quickCaptureType === "task" ? text.addTask : "Start"}</span>
+                    <Icon name="play" size={12} />
+                    <span>Start</span>
                   </button>
                 </form>
 
@@ -4829,6 +5120,14 @@ PROJ-456;2026-05-11;2t`}</pre>
                   </button>
                   <button
                     type="button"
+                    onClick={() => openHandoverEntry(activeEntry)}
+                    disabled={!activeEntry}
+                  >
+                    <Icon name="todo" size={12} />
+                    <span>{text.handover}</span>
+                  </button>
+                  <button
+                    type="button"
                     className="danger"
                     onClick={() => activeEntryId != null && handleFinish(activeEntryId)}
                     disabled={!activeEntry}
@@ -4880,8 +5179,9 @@ PROJ-456;2026-05-11;2t`}</pre>
                         handleStartNewTicket();
                       }
                     }}
-                    placeholder="Type or search ticket"
+                    placeholder="Søk eller skriv ticket (f.eks. KAN-9)"
                   />
+                  <span className="search-shortcut">/</span>
                 </div>
 
                 {search && (
@@ -4906,55 +5206,136 @@ PROJ-456;2026-05-11;2t`}</pre>
                   </ul>
                 )}
 
-                <div className="main-actions">
-                  <Btn
-                    icon="play"
-                    label="New Ticket"
-                    shortcut="S"
-                    color="green"
-                    onClick={handleStartNewTicket}
-                  />
+                <div className="work-controls-stack">
+                  <div className="work-controls-card">
+                    <span className="work-controls-label">Work</span>
+                    <div className="work-actions">
+                      <div className="work-action-block primary">
+                        <Btn
+                          icon="play"
+                          label="Start Ticket"
+                          shortcut="S"
+                          color="green"
+                          onClick={handleStartNewTicket}
+                        />
+                        <span>Start tracking time on a ticket</span>
+                      </div>
 
-                  <Btn
-                    icon="plus"
-                    label="Add Manual Time"
-                    shortcut="M"
-                    color="blue"
-                    onClick={() => openManual(selectedTicket || "")}
-                  />
+                      <div className="work-action-block">
+                        <Btn
+                          icon="plus"
+                          label="Add Time"
+                          shortcut="M"
+                          color="dark"
+                          onClick={() => openManual(selectedTicket || "")}
+                        />
+                        <span>Add time without starting</span>
+                      </div>
+                    </div>
+                  </div>
 
-                  <Btn
-                    icon="export"
-                    label={pendingJiraWorklogEntries.length ? `Sync Jira (${pendingJiraWorklogEntries.length})` : "Sync Jira"}
-                    color="purple"
-                    onClick={handleSyncJiraWorklogs}
-                    disabled={!canSyncJiraFromHome}
-                    style={{ gridColumn: "1 / -1", width: "100%" }}
-                  />
+                  <div className="work-controls-card sync-card">
+                    <span className="work-controls-label">Sync</span>
+                    <div className="sync-row">
+                      <span className="sync-icon">
+                        <Icon name="cloudUpload" size={20} />
+                      </span>
+                      <div className="sync-copy">
+                        <strong>
+                          Jira worklogs
+                          {pendingJiraWorklogEntries.length > 0 && (
+                            <span className="sync-pending-pill">{pendingJiraWorklogEntries.length} pending</span>
+                          )}
+                        </strong>
+                        <span>Manual sync only</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="sync-action"
+                        onClick={handleSyncJiraWorklogs}
+                        disabled={!canSyncJiraFromHome}
+                      >
+                        <Icon name="resetTimer" size={12} />
+                        <span>Sync</span>
+                      </button>
+                    </div>
+
+                    <div className="sync-meta-row">
+                      <span className="sync-mode-pill">
+                        <span className="sync-dot" />
+                        Manual sync
+                      </span>
+                      <button type="button" onClick={openSettingsView}>
+                        <Icon name="settings" size={11} />
+                        <span>Sync settings</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="work-controls-card tasks-control-card">
+                    <div className="tasks-control-header">
+                      <span className="work-controls-label">Tasks</span>
+                      <button type="button" onClick={toggleTodoPanel}>View all</button>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={`tasks-card ${showTodoPanel ? "active" : ""}`}
+                      onClick={toggleTodoPanel}
+                    >
+                      <span className="tasks-card-icon">
+                        <Icon name="todo" size={14} />
+                        {dueReminderCount > 0 && <span className="tasks-card-badge">{dueReminderCount}</span>}
+                      </span>
+                      <span className="tasks-card-copy">
+                        <strong>Tasks</strong>
+                        <span>
+                          {activeTodoCount > 0
+                            ? `${activeTodoCount} ${text.active}${activeReminderTask ? ` - ${text.dueNow.toLowerCase()} ${formatReminderTime(activeReminderTask.reminder)}` : ""}`
+                            : text.noneActiveTasks}
+                        </span>
+                      </span>
+                      <span className="tasks-card-action">
+                        {showTodoPanel ? text.hide : text.open}
+                      </span>
+                    </button>
+
+                    <div className="tasks-control-footnote">
+                      <span className="sync-dot purple" />
+                      <span>Hold oversikten over oppgaver og gjøremål</span>
+                    </div>
+                  </div>
+
+                  <div className="work-shortcuts-row">
+                    <button type="button" onClick={() => mainSearchRef.current?.focus()}>
+                      <Icon name="starOutline" size={13} />
+                      <span>Favoritter</span>
+                    </button>
+                    <button type="button" onClick={openEndDayView}>
+                      <Icon name="clockReset" size={13} />
+                      <span>Nylige</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeEntry) {
+                          openHandoverEntry(activeEntry);
+                          return;
+                        }
+
+                        setMessage("Start eller velg en ticket først");
+                      }}
+                    >
+                      <Icon name="document" size={13} />
+                      <span>Notater</span>
+                    </button>
+                    <button type="button" onClick={openReportsView}>
+                      <Icon name="report" size={13} />
+                      <span>Rapporter</span>
+                    </button>
+                  </div>
                 </div>
               </section>
-
-              <button
-                type="button"
-                className={`tasks-card ${showTodoPanel ? "active" : ""}`}
-                onClick={toggleTodoPanel}
-              >
-                <span className="tasks-card-icon">
-                  <Icon name="todo" size={14} />
-                  {dueReminderCount > 0 && <span className="tasks-card-badge">{dueReminderCount}</span>}
-                </span>
-                <span className="tasks-card-copy">
-                  <strong>Tasks</strong>
-                  <span>
-                    {activeTodoCount > 0
-                      ? `${activeTodoCount} ${text.active}${activeReminderTask ? ` - ${text.dueNow.toLowerCase()} ${formatReminderTime(activeReminderTask.reminder)}` : ""}`
-                      : text.noneActiveTasks}
-                  </span>
-                </span>
-                <span className="tasks-card-action">
-                  {showTodoPanel ? text.hide : text.open}
-                </span>
-              </button>
             </>
           )}
 
@@ -5123,6 +5504,15 @@ PROJ-456;2026-05-11;2t`}</pre>
                                     title="Edit"
                                   >
                                     <Icon name="edit" size={13} />
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    className={`entry-action-btn handover ${hasHandoverNotes(entry) ? "has-notes" : ""}`}
+                                    onClick={() => openHandoverEntry(entry)}
+                                    title={text.handover}
+                                  >
+                                    <Icon name="todo" size={13} />
                                   </button>
 
                                   <button

@@ -320,6 +320,38 @@ export const Icon = ({ name, size = 13, color }) => {
                 <path d="M10.5 10V6" />
             </svg>
         ),
+        cloudUpload: (
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            >
+                <path d="M5 12.5H4.4a3 3 0 0 1-.4-6 4.2 4.2 0 0 1 7.9 1.1h.5a2.5 2.5 0 0 1 0 5h-.7" />
+                <path d="M8 13V8" />
+                <path d="M5.8 10.2 8 8l2.2 2.2" />
+            </svg>
+        ),
+        document: (
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            >
+                <path d="M4 2.5h5.5L12 5v8.5H4z" />
+                <path d="M9.5 2.5V5H12" />
+                <path d="M6 8h4M6 10.5h4" />
+            </svg>
+        ),
         search: (
             <svg
                 width={size}
@@ -407,6 +439,21 @@ export const Icon = ({ name, size = 13, color }) => {
             >
                 <circle cx="8" cy="8" r="5.5" />
                 <path d="M5.5 8l2 2 3-3" />
+            </svg>
+        ),
+        ticket: (
+            <svg
+                width={size}
+                height={size}
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            >
+                <path d="M3 4.5h10v2a1.5 1.5 0 0 0 0 3v2H3v-2a1.5 1.5 0 0 0 0-3v-2z" />
+                <path d="M6.2 5.2v5.6" />
             </svg>
         ),
         close: (

@@ -720,6 +720,25 @@ function buildJiraTicketJql(projectKeys, query) {
   return `${clauses.length ? `${clauses.join(" AND ")} ` : ""}ORDER BY updated DESC`;
 }
 
+function jiraTicketMatchesTextQuery(ticket, query) {
+  const safeQuery = truncateText(query, 120).toLowerCase();
+  if (!safeQuery || isJiraIssueKey(safeQuery)) return true;
+
+  const id = String(ticket.id ?? "").toLowerCase();
+  const title = String(ticket.title ?? "").toLowerCase();
+  const combined = `${id} ${title}`;
+  const normalizedCombined = combined.replace(/[^a-z0-9]+/g, " ");
+  const normalizedQuery = safeQuery.replace(/[^a-z0-9]+/g, " ").trim();
+
+  if (combined.includes(safeQuery)) return true;
+  if (!normalizedQuery) return false;
+
+  return normalizedQuery
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((part) => normalizedCombined.includes(part));
+}
+
 async function resolveJiraIssueDetails(jiraBaseUrl, jiraMode, authHeader, entry) {
   if (isJiraIssueKey(entry.issueKey)) return entry;
 
@@ -1732,85 +1751,135 @@ ipcMain.handle("jira:fetch-tickets", async (_, options = {}) => {
     const issues = [];
     let hasMore = false;
 
-    if (jiraMode === "server") {
-      let startAt = 0;
+    async function fetchIssuesForJql(searchJql) {
+      const nextIssues = [];
+      let nextHasMore;
 
-      do {
-        const pageSize = Math.min(50, maxResults - issues.length);
-        const response = await fetch(`${jiraBaseUrl}/rest/api/2/search`, {
-          method: "POST",
-          headers: {
-            Authorization: authHeader,
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            fields: ["summary"],
-            jql,
-            startAt,
-            maxResults: pageSize,
-          }),
-        });
+      if (jiraMode === "server") {
+        let startAt = 0;
 
-        if (!response.ok) {
-          return {
-            ok: false,
-            success: false,
-            status: response.status,
-            error: await getJiraResponseError(response),
-            tickets: [],
-          };
-        }
+        do {
+          const pageSize = Math.min(50, maxResults - nextIssues.length);
+          const response = await fetch(`${jiraBaseUrl}/rest/api/2/search`, {
+            method: "POST",
+            headers: {
+              Authorization: authHeader,
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              fields: ["summary"],
+              jql: searchJql,
+              startAt,
+              maxResults: pageSize,
+            }),
+          });
 
-        const body = await response.json();
-        const pageIssues = Array.isArray(body.issues) ? body.issues : [];
-        issues.push(...pageIssues);
+          if (!response.ok) {
+            return {
+              ok: false,
+              status: response.status,
+              error: await getJiraResponseError(response),
+              issues: [],
+              hasMore: false,
+            };
+          }
 
-        const received = startAt + pageIssues.length;
-        const total = Number(body.total);
-        hasMore = Number.isFinite(total) ? received < total : pageIssues.length === pageSize;
-        startAt = received;
-      } while (hasMore && issues.length < maxResults && startAt > 0);
-    } else {
-      let nextPageToken = "";
+          const body = await response.json();
+          const pageIssues = Array.isArray(body.issues) ? body.issues : [];
+          nextIssues.push(...pageIssues);
 
-      do {
-        const response = await fetch(`${jiraBaseUrl}/rest/api/3/search/jql`, {
-          method: "POST",
-          headers: {
-            Authorization: authHeader,
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            fields: ["summary"],
-            jql,
-            maxResults: Math.min(50, maxResults - issues.length),
-            ...(nextPageToken ? { nextPageToken } : {}),
-          }),
-        });
+          const received = startAt + pageIssues.length;
+          const total = Number(body.total);
+          nextHasMore = Number.isFinite(total) ? received < total : pageIssues.length === pageSize;
+          startAt = received;
+        } while (nextHasMore && nextIssues.length < maxResults && startAt > 0);
+      } else {
+        let nextPageToken = "";
 
-        if (!response.ok) {
-          return {
-            ok: false,
-            success: false,
-            status: response.status,
-            error: await getJiraResponseError(response),
-            tickets: [],
-          };
-        }
+        do {
+          const response = await fetch(`${jiraBaseUrl}/rest/api/3/search/jql`, {
+            method: "POST",
+            headers: {
+              Authorization: authHeader,
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              fields: ["summary"],
+              jql: searchJql,
+              maxResults: Math.min(50, maxResults - nextIssues.length),
+              ...(nextPageToken ? { nextPageToken } : {}),
+            }),
+          });
 
-        const body = await response.json();
-        issues.push(...(Array.isArray(body.issues) ? body.issues : []));
-        nextPageToken = body.nextPageToken || "";
-        hasMore = Boolean(nextPageToken);
-      } while (nextPageToken && issues.length < maxResults);
+          if (!response.ok) {
+            return {
+              ok: false,
+              status: response.status,
+              error: await getJiraResponseError(response),
+              issues: [],
+              hasMore: false,
+            };
+          }
+
+          const body = await response.json();
+          nextIssues.push(...(Array.isArray(body.issues) ? body.issues : []));
+          nextPageToken = body.nextPageToken || "";
+          nextHasMore = Boolean(nextPageToken);
+        } while (nextPageToken && nextIssues.length < maxResults);
+      }
+
+      return {
+        ok: true,
+        issues: nextIssues,
+        hasMore: nextHasMore,
+      };
+    }
+
+    const primaryResult = await fetchIssuesForJql(jql);
+    if (!primaryResult.ok) {
+      return {
+        ok: false,
+        success: false,
+        status: primaryResult.status,
+        error: primaryResult.error,
+        tickets: [],
+      };
+    }
+
+    issues.push(...primaryResult.issues);
+    hasMore = primaryResult.hasMore;
+
+    if (query && !isJiraIssueKey(query)) {
+      const broadJql = buildJiraTicketJql(projectKeys, "");
+      const broadResult = await fetchIssuesForJql(broadJql);
+
+      if (!broadResult.ok) {
+        return {
+          ok: false,
+          success: false,
+          status: broadResult.status,
+          error: broadResult.error,
+          tickets: [],
+        };
+      }
+
+      const existingIssueKeys = new Set(issues.map((issue) => String(issue.key ?? "").toUpperCase()));
+      broadResult.issues.forEach((issue) => {
+        const issueKey = String(issue.key ?? "").toUpperCase();
+        if (!issueKey || existingIssueKeys.has(issueKey)) return;
+        existingIssueKeys.add(issueKey);
+        issues.push(issue);
+      });
+      hasMore = hasMore || broadResult.hasMore;
     }
 
     const tickets = issues
-      .slice(0, maxResults)
       .map(normalizeJiraTicket)
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((ticket) => jiraTicketMatchesTextQuery(ticket, query))
+      .slice(0, maxResults);
 
     return {
       ok: true,

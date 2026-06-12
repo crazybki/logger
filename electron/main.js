@@ -625,24 +625,6 @@ function getTempoStartDetails(value, fallbackDateKey = "") {
   };
 }
 
-function createJiraCommentDocument(text) {
-  return {
-    type: "doc",
-    version: 1,
-    content: [
-      {
-        type: "paragraph",
-        content: [
-          {
-            type: "text",
-            text: truncateText(text, 300),
-          },
-        ],
-      },
-    ],
-  };
-}
-
 function getJiraIssueDetails(entry) {
   const explicitIssueKey = truncateText(entry.jiraIssueKey, 80) || truncateText(entry.issueKey, 80);
   const ticketName = truncateText(entry.ticketName, 160);
@@ -1949,12 +1931,10 @@ ipcMain.handle("jira:sync-worklogs", async (_, entries = []) => {
             body: JSON.stringify(
               jiraMode === "server"
                 ? {
-                  comment: `Logged from Time Logger: ${entry.displayName}`,
                   started: entry.started,
                   timeSpentSeconds: entry.timeSpentSeconds,
                 }
                 : {
-                  comment: createJiraCommentDocument(`Logged from Time Logger: ${entry.displayName}`),
                   started: entry.started,
                   timeSpentSeconds: entry.timeSpentSeconds,
                   properties: [

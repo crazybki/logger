@@ -711,7 +711,9 @@ function buildJiraTicketJql(projectKeys, query) {
     clauses.push(`project in (${safeProjectKeys.join(", ")})`);
   }
 
-  if (safeQuery) {
+  if (safeQuery && isJiraIssueKey(safeQuery)) {
+    clauses.push(`issuekey = ${safeQuery.toUpperCase()}`);
+  } else if (safeQuery) {
     clauses.push(`summary ~ "${escapeJiraJqlText(safeQuery)}"`);
   }
 

@@ -2912,7 +2912,7 @@ function Logger() {
       const result = await window.loggerAPI.jiraFetchTickets({
         projectKeys: selectedJiraProjectKeys,
         query: jiraTicketQuery,
-        maxResults: 100,
+        maxResults: 5000,
       });
 
       if (!result?.success) {

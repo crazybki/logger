@@ -355,14 +355,25 @@ function Logger() {
     return Math.max(0, Math.ceil((deleteAt - nowTick) / (24 * 60 * 60 * 1000)));
   }
 
-  function getTicketMergeKey(entry) {
-    return `${getDateKey(entry)}::${String(entry.ticketName ?? "").trim().toLowerCase()}`;
-  }
-
   function getJiraIssueKeyFromTicketName(ticketName) {
     const value = String(ticketName ?? "").trim();
     const match = value.match(/^([A-Z][A-Z0-9]+-\d+)(?:\s+-\s+.+)?$/i);
     return match ? match[1].toUpperCase() : value;
+  }
+
+  function getTicketMergeIdentity(entry) {
+    const explicitIssueKey = String(entry?.jiraIssueKey || entry?.issueKey || "").trim();
+    const issueKey = getJiraIssueKeyFromTicketName(explicitIssueKey || entry?.ticketName);
+
+    if (/^[A-Z][A-Z0-9]+-\d+$/i.test(issueKey)) {
+      return `issue:${issueKey.toUpperCase()}`;
+    }
+
+    return `name:${String(entry?.ticketName ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ")}`;
+  }
+
+  function getTicketMergeKey(entry) {
+    return `${getDateKey(entry)}::${getTicketMergeIdentity(entry)}`;
   }
 
   function canMergeTicketEntry(entry) {
@@ -370,6 +381,19 @@ function Logger() {
       entry &&
       !entry.deletedAt &&
       entry.status === "done" &&
+      entry.source !== "todo" &&
+      !entry.todoTaskId &&
+      !entry.jiraWorklogId &&
+      !entry.tempoWorklogId &&
+      String(entry.ticketName ?? "").trim()
+    );
+  }
+
+  function canContinueTicketEntry(entry) {
+    return (
+      entry &&
+      !entry.deletedAt &&
+      entry.status === "paused" &&
       entry.source !== "todo" &&
       !entry.todoTaskId &&
       !entry.jiraWorklogId &&
@@ -1814,6 +1838,40 @@ function Logger() {
       source: "timer",
       ...entryMeta,
     };
+
+    const newEntryMergeKey = getTicketMergeKey(newEntry);
+    const activeEntry = entries.find((entry) => entry.id === activeEntryId && entry.status === "running");
+
+    if (activeEntry && getTicketMergeKey(activeEntry) === newEntryMergeKey) {
+      setMessage("Ticket is already running");
+      return;
+    }
+
+    const existingPausedEntry = entries.find(
+      (entry) => entry.id !== activeEntryId && canContinueTicketEntry(entry) && getTicketMergeKey(entry) === newEntryMergeKey
+    );
+
+    if (existingPausedEntry) {
+      setEntries((prev) =>
+        prev.map((entry) => {
+          if (entry.id === activeEntryId && entry.status === "running") {
+            return { ...applyElapsedTime(entry, timestamp), status: "paused", lastTickAt: undefined };
+          }
+
+          if (entry.id === existingPausedEntry.id) {
+            return { ...entry, status: "running", lastTickAt: timestamp };
+          }
+
+          return entry;
+        })
+      );
+      setActiveEntryId(existingPausedEntry.id);
+      setSelectedTicket(existingPausedEntry.ticketName || value);
+      setSearch("");
+      setMiniTicket("");
+      setMessage("Ticket resumed");
+      return;
+    }
 
     setEntries((prev) => addOrMergeCompletedTicketEntry(prev, newEntry));
     setActiveEntryId(newEntry.id);

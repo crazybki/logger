@@ -672,6 +672,35 @@ function Logger() {
     const query = String(queryValue ?? "").trim().toLowerCase();
     if (!query) return jiraTickets;
 
+    function getSearchParts(value) {
+      return String(value ?? "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    }
+
+    function searchPartMatches(queryPart, ticketParts) {
+      const aliases = queryPart === "support"
+        ? ["support", "supp"]
+        : queryPart === "supp"
+          ? ["supp", "support"]
+          : [queryPart];
+
+      return aliases.some((alias) =>
+        ticketParts.some((part) => part.includes(alias) || alias.includes(part))
+      );
+    }
+
+    function fuzzyMatches(combined) {
+      const queryParts = getSearchParts(query);
+      if (!queryParts.length) return false;
+
+      const ticketParts = getSearchParts(combined);
+      return queryParts.every((part) => searchPartMatches(part, ticketParts));
+    }
+
     function scoreTicket(ticket) {
       const id = String(ticket.id ?? "").toLowerCase();
       const title = String(ticket.title ?? "").toLowerCase();
@@ -681,6 +710,7 @@ function Logger() {
       if (id.startsWith(query)) return 1;
       if (title.startsWith(query)) return 2;
       if (combined.includes(query)) return 3;
+      if (fuzzyMatches(combined)) return 4;
       return 99;
     }
 

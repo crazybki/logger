@@ -704,21 +704,40 @@ function buildJiraTicketJql(projectKeys, query) {
 
 function jiraTicketMatchesTextQuery(ticket, query) {
   const safeQuery = truncateText(query, 120).toLowerCase();
-  if (!safeQuery || isJiraIssueKey(safeQuery)) return true;
+  if (!safeQuery) return true;
 
   const id = String(ticket.id ?? "").toLowerCase();
   const title = String(ticket.title ?? "").toLowerCase();
   const combined = `${id} ${title}`;
-  const normalizedCombined = combined.replace(/[^a-z0-9]+/g, " ");
-  const normalizedQuery = safeQuery.replace(/[^a-z0-9]+/g, " ").trim();
 
+  if (id === safeQuery) return true;
   if (combined.includes(safeQuery)) return true;
-  if (!normalizedQuery) return false;
 
-  return normalizedQuery
+  const combinedParts = combined
+    .replace(/[^a-z0-9]+/g, " ")
     .split(/\s+/)
-    .filter(Boolean)
-    .every((part) => normalizedCombined.includes(part));
+    .filter(Boolean);
+  const queryParts = safeQuery
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (!queryParts.length) return false;
+
+  function partMatches(queryPart) {
+    const aliases = queryPart === "support"
+      ? ["support", "supp"]
+      : queryPart === "supp"
+        ? ["supp", "support"]
+        : [queryPart];
+
+    return aliases.some((alias) =>
+      combinedParts.some((part) => part.includes(alias) || alias.includes(part))
+    );
+  }
+
+  return queryParts.every(partMatches);
 }
 
 async function resolveJiraIssueDetails(jiraBaseUrl, jiraMode, authHeader, entry) {
@@ -1833,7 +1852,7 @@ ipcMain.handle("jira:fetch-tickets", async (_, options = {}) => {
     issues.push(...primaryResult.issues);
     hasMore = primaryResult.hasMore;
 
-    if (query && !isJiraIssueKey(query)) {
+    if (query) {
       const broadJql = buildJiraTicketJql(projectKeys, "");
       const broadResult = await fetchIssuesForJql(broadJql);
 

@@ -194,6 +194,8 @@ function Logger() {
     }
   });
   const [jiraStatus, setJiraStatus] = useState({
+    jiraMode: "cloud",
+    jiraAuthMethod: "bearer",
     jiraBaseUrl: "",
     jiraEmail: "",
     hasJiraApiToken: false,
@@ -500,8 +502,15 @@ function Logger() {
       });
   }, [activeEntries, jiraTickets]);
 
+  const savedJiraMode = jiraStatus.jiraMode || "cloud";
+  const savedJiraAuthMethod = jiraStatus.jiraAuthMethod || "bearer";
+  const savedJiraIdentityRequired = savedJiraMode !== "server" || savedJiraAuthMethod === "basic";
+  const hasSavedJiraCredentials =
+    Boolean(jiraStatus.jiraBaseUrl) &&
+    (!savedJiraIdentityRequired || Boolean(jiraStatus.jiraEmail)) &&
+    Boolean(jiraStatus.hasJiraApiToken);
   const canSyncJiraFromHome =
-    Boolean(jiraStatus.jiraBaseUrl && jiraStatus.jiraEmail && jiraStatus.hasJiraApiToken) &&
+    hasSavedJiraCredentials &&
     pendingJiraWorklogEntries.length > 0 &&
     !isJiraBusy;
 
@@ -882,6 +891,8 @@ function Logger() {
       if (cancelled || !result?.ok) return;
 
       setJiraStatus({
+        jiraMode: result.values?.jiraMode || "cloud",
+        jiraAuthMethod: result.values?.jiraAuthMethod || "bearer",
         jiraBaseUrl: result.values?.jiraBaseUrl || "",
         jiraEmail: result.values?.jiraEmail || "",
         hasJiraApiToken: Boolean(result.values?.hasJiraApiToken),
@@ -2330,6 +2341,8 @@ function Logger() {
       }
 
       setJiraStatus({
+        jiraMode: result.values?.jiraMode || "cloud",
+        jiraAuthMethod: result.values?.jiraAuthMethod || "bearer",
         jiraBaseUrl: result.values?.jiraBaseUrl || "",
         jiraEmail: result.values?.jiraEmail || "",
         hasJiraApiToken: Boolean(result.values?.hasJiraApiToken),
@@ -2399,6 +2412,8 @@ function Logger() {
       }
 
       setJiraStatus({
+        jiraMode: "cloud",
+        jiraAuthMethod: "bearer",
         jiraBaseUrl: "",
         jiraEmail: "",
         hasJiraApiToken: false,

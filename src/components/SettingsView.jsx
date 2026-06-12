@@ -72,11 +72,20 @@ export function SettingsView({
         save: "Save settings",
         jira: "Jira",
         jiraHelp: "Store credentials securely and sync completed time entries as Jira worklogs.",
+        jiraMode: "Jira type",
+        jiraCloud: "Cloud",
+        jiraServer: "Server/Data Center",
+        jiraAuthMethod: "Authentication",
+        jiraBearerPat: "Bearer PAT",
+        jiraBasicPassword: "Basic username/password",
         jiraBaseUrl: "Base URL",
-        jiraEmail: "Email",
-        jiraApiToken: "API token",
-        jiraTokenSaved: "API token saved",
-        jiraTokenMissing: "No API token saved",
+        jiraCloudIdentity: "Jira Cloud email",
+        jiraServerIdentity: "Jira Server/DC username",
+        jiraServerIdentityOptional: "Jira Server/DC username (optional for PAT)",
+        jiraCloudSecret: "Jira Cloud API token",
+        jiraServerSecret: "Jira Server/DC PAT or password",
+        jiraTokenSaved: "Credential saved",
+        jiraTokenMissing: "No credential saved",
         saveJira: "Save Jira",
         testJira: "Test connection",
         clearJira: "Clear",
@@ -101,9 +110,9 @@ export function SettingsView({
         pendingSync: "Pending",
         jiraStepsTitle: "How to sync",
         jiraSteps:
-          "Save your Jira URL, email, and API token. Test the connection, then sync completed ticket entries. Entries already synced are skipped.",
+          "Use Jira Cloud with email and API token, or Jira Server/Data Center with username and PAT/password. Test connection is available for both modes.",
         jiraReadyToTest: "You can test after the Jira details are filled in. Unsaved changes are saved before testing.",
-        jiraSaveFirst: "Fill in Jira URL, email, and API token before testing.",
+        jiraSaveFirst: "Fill in Jira URL and credentials before testing.",
         jiraTickets: "Jira tickets",
         jiraTicketsHelp: "Choose projects and fetch issues into the local ticket search.",
         loadProjects: "Load projects",
@@ -142,11 +151,20 @@ export function SettingsView({
         save: "Lagre innstillinger",
         jira: "Jira",
         jiraHelp: "Lagre innlogging sikkert og synk ferdige time entries som Jira worklogs.",
+        jiraMode: "Jira-type",
+        jiraCloud: "Cloud",
+        jiraServer: "Server/Data Center",
+        jiraAuthMethod: "Autentisering",
+        jiraBearerPat: "Bearer PAT",
+        jiraBasicPassword: "Basic brukernavn/passord",
         jiraBaseUrl: "Base URL",
-        jiraEmail: "E-post",
-        jiraApiToken: "API token",
-        jiraTokenSaved: "API token lagret",
-        jiraTokenMissing: "Ingen API token lagret",
+        jiraCloudIdentity: "Jira Cloud e-post",
+        jiraServerIdentity: "Jira Server/DC brukernavn",
+        jiraServerIdentityOptional: "Jira Server/DC brukernavn (valgfritt for PAT)",
+        jiraCloudSecret: "Jira Cloud API token",
+        jiraServerSecret: "Jira Server/DC PAT eller passord",
+        jiraTokenSaved: "Credential lagret",
+        jiraTokenMissing: "Ingen credential lagret",
         saveJira: "Lagre Jira",
         testJira: "Test tilkobling",
         clearJira: "Slett",
@@ -171,9 +189,9 @@ export function SettingsView({
         pendingSync: "Venter",
         jiraStepsTitle: "Slik synker du",
         jiraSteps:
-          "Lagre Jira URL, e-post og API token. Test tilkoblingen, og synk deretter ferdige ticket entries. Entries som allerede er synket hoppes over.",
+          "Bruk Jira Cloud med e-post og API token, eller Jira Server/Data Center med brukernavn og PAT/passord. Test tilkobling virker for begge moduser.",
         jiraReadyToTest: "Du kan teste når Jira-feltene er fylt ut. Ulagrede endringer lagres før testen.",
-        jiraSaveFirst: "Fyll inn Jira URL, e-post og API token før du tester.",
+        jiraSaveFirst: "Fyll inn Jira URL og credentials før du tester.",
         jiraTickets: "Jira tickets",
         jiraTicketsHelp: "Velg prosjekter og hent saker inn i lokalt ticketsøk.",
         loadProjects: "Hent prosjekter",
@@ -195,6 +213,8 @@ export function SettingsView({
   const [selectedThemePreset, setSelectedThemePreset] = useState(themePreset || "default");
   const [selectedAccentColor, setSelectedAccentColor] = useState(themeAccentColor || "");
   const [selectedLanguage, setSelectedLanguage] = useState(appLanguage || "no");
+  const [jiraMode, setJiraMode] = useState(jiraStatus.jiraMode || "cloud");
+  const [jiraAuthMethod, setJiraAuthMethod] = useState(jiraStatus.jiraAuthMethod || "bearer");
   const [jiraBaseUrl, setJiraBaseUrl] = useState(jiraStatus.jiraBaseUrl || "");
   const [jiraEmail, setJiraEmail] = useState(jiraStatus.jiraEmail || "");
   const [jiraApiToken, setJiraApiToken] = useState("");
@@ -211,10 +231,18 @@ export function SettingsView({
   }, [appLanguage, dailyTargetSeconds, themeAccentColor, themePreset, trashRetentionDays]);
 
   useEffect(() => {
+    setJiraMode(jiraStatus.jiraMode || "cloud");
+    setJiraAuthMethod(jiraStatus.jiraAuthMethod || "bearer");
     setJiraBaseUrl(jiraStatus.jiraBaseUrl || "");
     setJiraEmail(jiraStatus.jiraEmail || "");
     setJiraApiToken("");
-  }, [jiraStatus.jiraBaseUrl, jiraStatus.jiraEmail, jiraStatus.hasJiraApiToken]);
+  }, [
+    jiraStatus.jiraAuthMethod,
+    jiraStatus.jiraBaseUrl,
+    jiraStatus.jiraEmail,
+    jiraStatus.jiraMode,
+    jiraStatus.hasJiraApiToken,
+  ]);
 
   useEffect(() => {
     setTempoApiToken("");
@@ -223,12 +251,23 @@ export function SettingsView({
   const nextDailyTargetSeconds =
     (Number(targetHours) || 0) * 3600 + (Number(targetMinutes) || 0) * 60;
   const canSave = nextDailyTargetSeconds > 0 && Number(retentionDays) > 0;
+  const isJiraCloud = jiraMode !== "server";
+  const isJiraServerBasic = jiraMode === "server" && jiraAuthMethod === "basic";
+  const isJiraIdentityRequired = isJiraCloud || isJiraServerBasic;
+  const savedJiraMode = jiraStatus.jiraMode || "cloud";
+  const savedJiraAuthMethod = jiraStatus.jiraAuthMethod || "bearer";
+  const savedJiraIdentityRequired = savedJiraMode !== "server" || savedJiraAuthMethod === "basic";
   const canSaveJira =
-    Boolean(jiraBaseUrl.trim() && jiraEmail.trim()) &&
+    Boolean(jiraBaseUrl.trim()) &&
+    (!isJiraIdentityRequired || Boolean(jiraEmail.trim())) &&
     (Boolean(jiraApiToken.trim()) || Boolean(jiraStatus.hasJiraApiToken));
   const hasSavedJiraCredentials =
-    Boolean(jiraStatus.jiraBaseUrl && jiraStatus.jiraEmail && jiraStatus.hasJiraApiToken);
+    Boolean(jiraStatus.jiraBaseUrl) &&
+    (!savedJiraIdentityRequired || Boolean(jiraStatus.jiraEmail)) &&
+    Boolean(jiraStatus.hasJiraApiToken);
   const hasUnsavedJiraChanges =
+    jiraMode !== savedJiraMode ||
+    jiraAuthMethod !== savedJiraAuthMethod ||
     jiraBaseUrl.trim() !== (jiraStatus.jiraBaseUrl || "") ||
     jiraEmail.trim() !== (jiraStatus.jiraEmail || "") ||
     Boolean(jiraApiToken.trim());
@@ -263,6 +302,8 @@ export function SettingsView({
 
   function getJiraCredentialPayload() {
     const credentials = {
+      jiraMode,
+      jiraAuthMethod: jiraMode === "server" ? jiraAuthMethod : "bearer",
       jiraBaseUrl: jiraBaseUrl.trim(),
       jiraEmail: jiraEmail.trim(),
     };
@@ -477,11 +518,56 @@ export function SettingsView({
           </div>
 
           <div className="jira-settings-grid">
+            <div className="settings-single-input">
+              <span>{text.jiraMode}</span>
+              <div className="settings-language-toggle" role="group" aria-label={text.jiraMode}>
+                <button
+                  type="button"
+                  className={jiraMode === "cloud" ? "active" : ""}
+                  onClick={() => {
+                    setJiraMode("cloud");
+                    setJiraAuthMethod("bearer");
+                  }}
+                >
+                  {text.jiraCloud}
+                </button>
+                <button
+                  type="button"
+                  className={jiraMode === "server" ? "active" : ""}
+                  onClick={() => setJiraMode("server")}
+                >
+                  {text.jiraServer}
+                </button>
+              </div>
+            </div>
+
+            {jiraMode === "server" && (
+              <div className="settings-single-input">
+                <span>{text.jiraAuthMethod}</span>
+                <div className="settings-language-toggle" role="group" aria-label={text.jiraAuthMethod}>
+                  <button
+                    type="button"
+                    className={jiraAuthMethod !== "basic" ? "active" : ""}
+                    onClick={() => setJiraAuthMethod("bearer")}
+                  >
+                    {text.jiraBearerPat}
+                  </button>
+                  <button
+                    type="button"
+                    className={jiraAuthMethod === "basic" ? "active" : ""}
+                    onClick={() => setJiraAuthMethod("basic")}
+                  >
+                    {text.jiraBasicPassword}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <label className="settings-single-input">
               <span>{text.jiraBaseUrl}</span>
               <input
                 type="url"
-                placeholder="https://company.atlassian.net"
+                placeholder={jiraMode === "server" ? "https://jira.example.com/jira" : "https://company.atlassian.net"}
                 value={jiraBaseUrl}
                 onChange={(event) => setJiraBaseUrl(event.target.value)}
                 autoComplete="off"
@@ -489,9 +575,13 @@ export function SettingsView({
             </label>
 
             <label className="settings-single-input">
-              <span>{text.jiraEmail}</span>
+              <span>
+                {jiraMode === "server"
+                  ? (jiraAuthMethod === "basic" ? text.jiraServerIdentity : text.jiraServerIdentityOptional)
+                  : text.jiraCloudIdentity}
+              </span>
               <input
-                type="email"
+                type={jiraMode === "server" ? "text" : "email"}
                 value={jiraEmail}
                 onChange={(event) => setJiraEmail(event.target.value)}
                 autoComplete="username"
@@ -499,7 +589,7 @@ export function SettingsView({
             </label>
 
             <label className="settings-single-input">
-              <span>{text.jiraApiToken}</span>
+              <span>{jiraMode === "server" ? text.jiraServerSecret : text.jiraCloudSecret}</span>
               <input
                 type="password"
                 value={jiraApiToken}

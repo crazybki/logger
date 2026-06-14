@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { ClipboardCheck, FilePenLine, Trash2 } from "lucide-react";
 import "../../styles/logger.css";
 import WindowTitleBar from "../main logger/WindowTitleBar";
 import { PillMenu } from "../components/PillMenu";
@@ -31,21 +32,21 @@ const SHOW_COUNTDOWN_SECTION = false;
 
 const UI_TEXT = {
   no: {
-    reminders: "Påminnelser",
+    reminders: "PÃ¥minnelser",
     tasks: "Tasks",
     review: "Review",
     endDay: "Avslutt dag",
     export: "Eksport",
-    dueNow: "Nå",
+    dueNow: "NÃ¥",
     scheduled: "Planlagt",
-    noReminders: "Ingen task-påminnelser",
+    noReminders: "Ingen task-pÃ¥minnelser",
     snoozedUntil: "Utsatt til",
     done: "Ferdig",
     logged: "Logget",
-    remaining: "Gjenstår",
+    remaining: "GjenstÃ¥r",
     add: "Legg til",
     closeDay: "Lukk dag",
-    noActiveOrTasks: "Ingen aktiv timer eller åpne tasks",
+    noActiveOrTasks: "Ingen aktiv timer eller Ã¥pne tasks",
     today: "I dag",
     thisWeek: "Denne uka",
     tasksOnly: "Kun tasks",
@@ -61,10 +62,10 @@ const UI_TEXT = {
     back: "Tilbake",
     activeTicket: "Aktiv ticket",
     noActiveTicket: "Ingen aktiv ticket",
-    running: "Kjører",
+    running: "KjÃ¸rer",
     startOrSelect: "Start eller velg ticket under",
     switchTicket: "Bytt",
-    remainingToday: "Gjenstår i dag",
+    remainingToday: "GjenstÃ¥r i dag",
     addTask: "Legg til",
     newTaskPlaceholder: "Ny task...",
     startTicketPlaceholder: "Start ticket...",
@@ -73,7 +74,7 @@ const UI_TEXT = {
     isThisRight: "Stemmer dette?",
     looksRight: "Stemmer",
     adjust: "Juster",
-    open: "Åpne",
+    open: "Ã…pne",
     hide: "Skjul",
     active: "aktive",
     noneActiveTasks: "Ingen aktive tasks",
@@ -1154,7 +1155,7 @@ function Logger() {
       setStoragePercent(remainingPercent);
 
       if (remainingPercent < 10) {
-        setMessage(`⚠ Local storage: ${remainingPercent.toFixed(1)}% remaining`);
+        setMessage(`Local storage: ${remainingPercent.toFixed(1)}% remaining`);
       }
     } catch (error) {
       console.error("Could not check storage:", error);
@@ -1814,7 +1815,7 @@ function Logger() {
     const timestamp = Date.now();
 
     if (!value) {
-      setMessage("Velg eller skriv inn en ticket først");
+      setMessage("Velg eller skriv inn en ticket fÃ¸rst");
       return;
     }
 
@@ -2217,7 +2218,7 @@ function Logger() {
     const existingEntry = getTodoTimerEntry(task.id);
 
     if (existingEntry?.id === activeEntryId) {
-      setMessage("Task timer kjører allerede");
+      setMessage("Task timer kjÃ¸rer allerede");
     } else {
       handleStartTodoTimer(task);
     }
@@ -2369,7 +2370,7 @@ function Logger() {
 
   function startMergeEntry(entry) {
     if (entry.status === "running") {
-      setMessage("Pause eller fullfør ticket før merge");
+      setMessage("Pause eller fullfÃ¸r ticket fÃ¸r merge");
       setTodoContextMenu(null);
       return;
     }
@@ -2382,7 +2383,7 @@ function Logger() {
 
     setMergeSourceEntryId(entry.id);
     setTodoContextMenu(null);
-    setMessage("Velg ticket å merge inn i");
+    setMessage("Velg ticket Ã¥ merge inn i");
   }
 
   function mergeEntryInto(targetEntry) {
@@ -3106,7 +3107,7 @@ function Logger() {
     const totalSeconds = hours * 3600 + minutes * 60;
 
     if (totalSeconds <= 0) {
-      setMessage("Manuell tid må være større enn 0");
+      setMessage("Manuell tid mÃ¥ vÃ¦re stÃ¸rre enn 0");
       return;
     }
 
@@ -3240,7 +3241,7 @@ function Logger() {
     const text = getJiraCopyText(preset);
 
     if (!text || text.startsWith("Total | 0m")) {
-      setMessage("Ingen entries å kopiere");
+      setMessage("Ingen entries Ã¥ kopiere");
       return;
     }
 
@@ -3278,7 +3279,7 @@ function Logger() {
     const entriesToExport = getExportEntriesForPreset(preset);
 
     if (!entriesToExport.length) {
-      setMessage("Ingen entries å eksportere");
+      setMessage("Ingen entries Ã¥ eksportere");
       return;
     }
 
@@ -3452,7 +3453,7 @@ function Logger() {
         <div className="import-guide-header">
           <div>
             <h2>Import format</h2>
-            <p>CSV, TSV og TXT støttes</p>
+            <p>CSV, TSV og TXT stÃ¸ttes</p>
           </div>
           <button type="button" onClick={() => setShowImportGuide(false)} aria-label="Close import guide">
             <Icon name="close" size={13} />
@@ -3463,13 +3464,13 @@ function Logger() {
           <div>
             <span>Required</span>
             <strong>Ticket</strong>
-            <p>Kan også hete Ticket ID, ID eller Key.</p>
+            <p>Kan ogsÃ¥ hete Ticket ID, ID eller Key.</p>
           </div>
 
           <div>
             <span>Optional</span>
             <strong>Title, Favorite, Date, Duration, Hours, Minutes</strong>
-            <p>Favorite støtter yes, true, 1, ja eller x.</p>
+            <p>Favorite stÃ¸tter yes, true, 1, ja eller x.</p>
           </div>
 
           <pre>{`Ticket;Date;Duration
@@ -3520,7 +3521,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               <span><kbd>Ctrl</kbd><em>+</em><kbd>K</kbd></span>
             </div>
             <div>
-              <span>Påminnelser</span>
+              <span>PÃ¥minnelser</span>
               <span><kbd>Alt</kbd><em>+</em><kbd>R</kbd></span>
             </div>
             <div>
@@ -3595,7 +3596,7 @@ PROJ-456;2026-05-11;2t`}</pre>
 
       {showTodoSnoozeMenu && (
         <div className="todo-snooze-menu">
-          <span>Utsett påminnelse</span>
+          <span>Utsett pÃ¥minnelse</span>
 
           <div className="todo-snooze-grid">
             <button type="button" onClick={() => snoozeTodoReminder(5)}>5 min</button>
@@ -3622,7 +3623,7 @@ PROJ-456;2026-05-11;2t`}</pre>
       <div className="todo-reminder-main">
         <span className="todo-reminder-icon"><Icon name="warning" size={13} /></span>
         <div>
-          <strong>Lagring begynner å bli full</strong>
+          <strong>Lagring begynner Ã¥ bli full</strong>
           <span>{storagePercent.toFixed(1)}% ledig lagring igjen</span>
         </div>
       </div>
@@ -3738,15 +3739,15 @@ PROJ-456;2026-05-11;2t`}</pre>
       <div className="end-day-checklist">
         <div className={activeEntry ? "warning" : "done"}>
           <Icon name={activeEntry ? "warning" : "check"} size={12} />
-          <span>{activeEntry ? (appLanguage === "en" ? "Active timer needs review" : "Aktiv timer må vurderes") : (appLanguage === "en" ? "No active timer" : "Ingen aktiv timer")}</span>
+          <span>{activeEntry ? (appLanguage === "en" ? "Active timer needs review" : "Aktiv timer mÃ¥ vurderes") : (appLanguage === "en" ? "No active timer" : "Ingen aktiv timer")}</span>
         </div>
         <div className={countdownSeconds > 0 ? "warning" : "done"}>
           <Icon name={countdownSeconds > 0 ? "warning" : "check"} size={12} />
-          <span>{countdownSeconds > 0 ? `${formatTimeShort(countdownSeconds)} ${appLanguage === "en" ? "remaining" : "mangler"}` : (appLanguage === "en" ? "Daily target reached" : "Dagsmål nådd")}</span>
+          <span>{countdownSeconds > 0 ? `${formatTimeShort(countdownSeconds)} ${appLanguage === "en" ? "remaining" : "mangler"}` : (appLanguage === "en" ? "Daily target reached" : "DagsmÃ¥l nÃ¥dd")}</span>
         </div>
         <div className={visibleTodoTasks.length > 0 ? "warning" : "done"}>
           <Icon name={visibleTodoTasks.length > 0 ? "warning" : "check"} size={12} />
-          <span>{visibleTodoTasks.length > 0 ? `${visibleTodoTasks.length} ${appLanguage === "en" ? "open tasks" : "åpne tasks"}` : (appLanguage === "en" ? "Tasks cleared" : "Tasks ryddet")}</span>
+          <span>{visibleTodoTasks.length > 0 ? `${visibleTodoTasks.length} ${appLanguage === "en" ? "open tasks" : "Ã¥pne tasks"}` : (appLanguage === "en" ? "Tasks cleared" : "Tasks ryddet")}</span>
         </div>
       </div>
 
@@ -4156,7 +4157,7 @@ PROJ-456;2026-05-11;2t`}</pre>
           >
             <option value="low">Lav</option>
             <option value="normal">Normal</option>
-            <option value="high">Høy</option>
+            <option value="high">HÃ¸y</option>
           </select>
 
           <input
@@ -4165,7 +4166,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             onChange={(event) =>
               setTodoDraft((prev) => ({ ...prev, reminder: event.target.value }))
             }
-            aria-label="Påminnelse"
+            aria-label="PÃ¥minnelse"
           />
         </div>
 
@@ -4295,7 +4296,7 @@ PROJ-456;2026-05-11;2t`}</pre>
           className="modal-close"
           onClick={() => setShowManualModal(false)}
         >
-          ×
+          Ã—
         </button>
       </div>
 
@@ -5267,7 +5268,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                         handleStartNewTicket();
                       }
                     }}
-                    placeholder="Søk eller skriv ticket (f.eks. KAN-9)"
+                    placeholder="SÃ¸k eller skriv ticket (f.eks. KAN-9)"
                   />
                   <span className="search-shortcut">/</span>
                 </div>
@@ -5360,68 +5361,25 @@ PROJ-456;2026-05-11;2t`}</pre>
                     </div>
                   </div>
 
-                  <div className="work-controls-card tasks-control-card">
-                    <div className="tasks-control-header">
-                      <span className="work-controls-label">Tasks</span>
-                      <button type="button" onClick={toggleTodoPanel}>View all</button>
-                    </div>
-
-                    <button
-                      type="button"
-                      className={`tasks-card ${showTodoPanel ? "active" : ""}`}
-                      onClick={toggleTodoPanel}
-                    >
-                      <span className="tasks-card-icon">
-                        <Icon name="todo" size={14} />
-                        {dueReminderCount > 0 && <span className="tasks-card-badge">{dueReminderCount}</span>}
-                      </span>
-                      <span className="tasks-card-copy">
-                        <strong>Tasks</strong>
-                        <span>
-                          {activeTodoCount > 0
-                            ? `${activeTodoCount} ${text.active}${activeReminderTask ? ` - ${text.dueNow.toLowerCase()} ${formatReminderTime(activeReminderTask.reminder)}` : ""}`
-                            : text.noneActiveTasks}
+                  {activeTodoCount > 0 && (
+                    <div className="work-controls-card tasks-control-card compact">
+                      <button
+                        type="button"
+                        className={`tasks-compact-indicator ${showTodoPanel ? "active" : ""}`}
+                        onClick={toggleTodoPanel}
+                      >
+                        <span className="tasks-card-icon">
+                          <Icon name="todo" size={13} />
+                          {dueReminderCount > 0 && <span className="tasks-card-badge">{dueReminderCount}</span>}
                         </span>
-                      </span>
-                      <span className="tasks-card-action">
-                        {showTodoPanel ? text.hide : text.open}
-                      </span>
-                    </button>
-
-                    <div className="tasks-control-footnote">
-                      <span className="sync-dot purple" />
-                      <span>Hold oversikten over oppgaver og gjøremål</span>
+                        <strong>Tasks ({activeTodoCount})</strong>
+                        <span className="tasks-card-action">
+                          {showTodoPanel ? text.hide : text.open}
+                        </span>
+                      </button>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="work-shortcuts-row">
-                    <button type="button" onClick={() => mainSearchRef.current?.focus()}>
-                      <Icon name="starOutline" size={13} />
-                      <span>Favoritter</span>
-                    </button>
-                    <button type="button" onClick={openEndDayView}>
-                      <Icon name="clockReset" size={13} />
-                      <span>Nylige</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (activeEntry) {
-                          openHandoverEntry(activeEntry);
-                          return;
-                        }
-
-                        setMessage("Start eller velg en ticket først");
-                      }}
-                    >
-                      <Icon name="document" size={13} />
-                      <span>Notater</span>
-                    </button>
-                    <button type="button" onClick={openReportsView}>
-                      <Icon name="report" size={13} />
-                      <span>Rapporter</span>
-                    </button>
-                  </div>
                 </div>
               </section>
             </>
@@ -5539,9 +5497,10 @@ PROJ-456;2026-05-11;2t`}</pre>
                   <div
                     key={date}
                     className="entry-group"
-                    >
-                      <div className="entry-group-header">
-                      <span>{displayDate}</span>
+                  >
+                    <div className="entry-group-header">
+                      <span className="entry-group-date">{displayDate}</span>
+                      <span className="entry-group-total-inline">Total {formatTimeShort(dayTotal)}</span>
                     </div>
 
                     <ul className="entry-list">
@@ -5569,7 +5528,6 @@ PROJ-456;2026-05-11;2t`}</pre>
                           <div className="entry-main">
                             <div className="entry-row">
                               <div className="entry-title-wrap">
-                                <span className="entry-dot" />
                                 {entry.source === "todo" && (
                                   <span
                                     className={`entry-source-icon task ${getTodoEntryNotes(entry) ? "has-notes" : ""}`}
@@ -5591,7 +5549,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                                     onClick={() => openEditEntry(entry)}
                                     title="Edit"
                                   >
-                                    <Icon name="edit" size={13} />
+                                    <FilePenLine size={13} strokeWidth={2} />
                                   </button>
 
                                   <button
@@ -5600,16 +5558,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                                     onClick={() => openHandoverEntry(entry)}
                                     title={text.handover}
                                   >
-                                    <Icon name="todo" size={13} />
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    className="entry-action-btn todo"
-                                    onClick={() => openTodoFromTicket(entry)}
-                                    title="Legg til som task"
-                                  >
-                                    <Icon name="todo" size={13} />
+                                    <ClipboardCheck size={13} strokeWidth={2} />
                                   </button>
 
                                   {entry.status !== "done" && entry.id !== activeEntryId && (
@@ -5629,7 +5578,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                                     onClick={() => handleDeleteEntry(entry.id)}
                                     title="Delete"
                                   >
-                                    <Icon name="trash" size={13} />
+                                    <Trash2 size={13} strokeWidth={2} />
                                   </button>
                                 </div>
                               </div>
@@ -5659,10 +5608,6 @@ PROJ-456;2026-05-11;2t`}</pre>
                       ))}
                     </ul>
 
-                    <div className="entry-group-total">
-                      <span>Total logget</span>
-                      <strong>{formatTimeShort(dayTotal)}</strong>
-                    </div>
                   </div>
                 );
               })}

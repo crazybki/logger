@@ -32,21 +32,21 @@ const SHOW_COUNTDOWN_SECTION = false;
 
 const UI_TEXT = {
   no: {
-    reminders: "PÃ¥minnelser",
+    reminders: "Påminnelser",
     tasks: "Tasks",
     review: "Review",
     endDay: "Avslutt dag",
     export: "Eksport",
-    dueNow: "NÃ¥",
+    dueNow: "Nå",
     scheduled: "Planlagt",
-    noReminders: "Ingen task-pÃ¥minnelser",
+    noReminders: "Ingen task-påminnelser",
     snoozedUntil: "Utsatt til",
     done: "Ferdig",
     logged: "Logget",
-    remaining: "GjenstÃ¥r",
+    remaining: "Gjenstår",
     add: "Legg til",
     closeDay: "Lukk dag",
-    noActiveOrTasks: "Ingen aktiv timer eller Ã¥pne tasks",
+    noActiveOrTasks: "Ingen aktiv timer eller åpne tasks",
     today: "I dag",
     thisWeek: "Denne uka",
     tasksOnly: "Kun tasks",
@@ -62,10 +62,10 @@ const UI_TEXT = {
     back: "Tilbake",
     activeTicket: "Aktiv ticket",
     noActiveTicket: "Ingen aktiv ticket",
-    running: "KjÃ¸rer",
+    running: "Kjører",
     startOrSelect: "Start eller velg ticket under",
     switchTicket: "Bytt",
-    remainingToday: "GjenstÃ¥r i dag",
+    remainingToday: "Gjenstår i dag",
     addTask: "Legg til",
     newTaskPlaceholder: "Ny task...",
     startTicketPlaceholder: "Start ticket...",
@@ -74,7 +74,7 @@ const UI_TEXT = {
     isThisRight: "Stemmer dette?",
     looksRight: "Stemmer",
     adjust: "Juster",
-    open: "Ã…pne",
+    open: "Åpne",
     hide: "Skjul",
     active: "aktive",
     noneActiveTasks: "Ingen aktive tasks",
@@ -149,7 +149,6 @@ function Logger() {
   const [missingTimeFilter, setMissingTimeFilter] = useState("missing");
   const [trashTab, setTrashTab] = useState("tickets");
   const [trashSearch, setTrashSearch] = useState("");
-  const [quickCaptureText, setQuickCaptureText] = useState("");
   const [todoFilter, setTodoFilter] = useState("all");
   const [dismissedLongTimerId, setDismissedLongTimerId] = useState(null);
   const [exportPreset, setExportPreset] = useState(() => {
@@ -318,7 +317,6 @@ function Logger() {
   const manualTicketRef = useRef(null);
   const mainSearchRef = useRef(null);
   const miniTicketRef = useRef(null);
-  const quickCaptureRef = useRef(null);
   const dailyTargetNotificationRef = useRef("");
   const taskNotificationRef = useRef("");
 
@@ -754,15 +752,6 @@ function Logger() {
     if (manualEntryType !== "ticket") return [];
     return getMatchingJiraTickets(manualTicket).slice(0, 5);
   }, [jiraTickets, manualEntryType, manualTicket]);
-
-  const quickCaptureTicketSuggestions = useMemo(() => {
-    if (!quickCaptureText.trim()) return [];
-    return getMatchingJiraTickets(quickCaptureText).slice(0, 5);
-  }, [jiraTickets, quickCaptureText]);
-
-  const favoriteTickets = useMemo(() => {
-    return jiraTickets.filter((ticket) => ticket.favorite);
-  }, [jiraTickets]);
 
   const selectedFavoriteTicket = useMemo(() => {
     const value = search.trim().toLowerCase();
@@ -1424,7 +1413,7 @@ function Logger() {
         e.preventDefault();
         closePrimaryViews();
         setIsMiniMode(false);
-        setTimeout(() => quickCaptureRef.current?.focus(), 0);
+        setTimeout(() => mainSearchRef.current?.focus(), 0);
         return;
       }
 
@@ -1802,20 +1791,12 @@ function Logger() {
     setMessage(`Selected ${ticket.id}`);
   }
 
-  function handleSelectQuickCaptureTicket(ticket) {
-    const fullName = ticket.title ? `${ticket.id} - ${ticket.title}` : ticket.id;
-    setQuickCaptureText(fullName);
-    setSelectedTicket(fullName);
-    setMessage(`Selected ${ticket.id}`);
-    quickCaptureRef.current?.focus();
-  }
-
   function startEntry(ticketName, entryMeta = {}) {
     const value = String(ticketName ?? "").trim();
     const timestamp = Date.now();
 
     if (!value) {
-      setMessage("Velg eller skriv inn en ticket fÃ¸rst");
+      setMessage("Velg eller skriv inn en ticket først");
       return;
     }
 
@@ -2218,7 +2199,7 @@ function Logger() {
     const existingEntry = getTodoTimerEntry(task.id);
 
     if (existingEntry?.id === activeEntryId) {
-      setMessage("Task timer kjÃ¸rer allerede");
+      setMessage("Task timer kjører allerede");
     } else {
       handleStartTodoTimer(task);
     }
@@ -2370,7 +2351,7 @@ function Logger() {
 
   function startMergeEntry(entry) {
     if (entry.status === "running") {
-      setMessage("Pause eller fullfÃ¸r ticket fÃ¸r merge");
+      setMessage("Pause eller fullfør ticket før merge");
       setTodoContextMenu(null);
       return;
     }
@@ -2383,7 +2364,7 @@ function Logger() {
 
     setMergeSourceEntryId(entry.id);
     setTodoContextMenu(null);
-    setMessage("Velg ticket Ã¥ merge inn i");
+    setMessage("Velg ticket å merge inn i");
   }
 
   function mergeEntryInto(targetEntry) {
@@ -3107,7 +3088,7 @@ function Logger() {
     const totalSeconds = hours * 3600 + minutes * 60;
 
     if (totalSeconds <= 0) {
-      setMessage("Manuell tid mÃ¥ vÃ¦re stÃ¸rre enn 0");
+      setMessage("Manuell tid må være større enn 0");
       return;
     }
 
@@ -3241,7 +3222,7 @@ function Logger() {
     const text = getJiraCopyText(preset);
 
     if (!text || text.startsWith("Total | 0m")) {
-      setMessage("Ingen entries Ã¥ kopiere");
+      setMessage("Ingen entries å kopiere");
       return;
     }
 
@@ -3279,7 +3260,7 @@ function Logger() {
     const entriesToExport = getExportEntriesForPreset(preset);
 
     if (!entriesToExport.length) {
-      setMessage("Ingen entries Ã¥ eksportere");
+      setMessage("Ingen entries å eksportere");
       return;
     }
 
@@ -3453,7 +3434,7 @@ function Logger() {
         <div className="import-guide-header">
           <div>
             <h2>Import format</h2>
-            <p>CSV, TSV og TXT stÃ¸ttes</p>
+            <p>CSV, TSV og TXT støttes</p>
           </div>
           <button type="button" onClick={() => setShowImportGuide(false)} aria-label="Close import guide">
             <Icon name="close" size={13} />
@@ -3464,13 +3445,13 @@ function Logger() {
           <div>
             <span>Required</span>
             <strong>Ticket</strong>
-            <p>Kan ogsÃ¥ hete Ticket ID, ID eller Key.</p>
+            <p>Kan også hete Ticket ID, ID eller Key.</p>
           </div>
 
           <div>
             <span>Optional</span>
             <strong>Title, Favorite, Date, Duration, Hours, Minutes</strong>
-            <p>Favorite stÃ¸tter yes, true, 1, ja eller x.</p>
+            <p>Favorite støtter yes, true, 1, ja eller x.</p>
           </div>
 
           <pre>{`Ticket;Date;Duration
@@ -3521,7 +3502,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               <span><kbd>Ctrl</kbd><em>+</em><kbd>K</kbd></span>
             </div>
             <div>
-              <span>PÃ¥minnelser</span>
+              <span>Påminnelser</span>
               <span><kbd>Alt</kbd><em>+</em><kbd>R</kbd></span>
             </div>
             <div>
@@ -3596,7 +3577,7 @@ PROJ-456;2026-05-11;2t`}</pre>
 
       {showTodoSnoozeMenu && (
         <div className="todo-snooze-menu">
-          <span>Utsett pÃ¥minnelse</span>
+          <span>Utsett påminnelse</span>
 
           <div className="todo-snooze-grid">
             <button type="button" onClick={() => snoozeTodoReminder(5)}>5 min</button>
@@ -3623,7 +3604,7 @@ PROJ-456;2026-05-11;2t`}</pre>
       <div className="todo-reminder-main">
         <span className="todo-reminder-icon"><Icon name="warning" size={13} /></span>
         <div>
-          <strong>Lagring begynner Ã¥ bli full</strong>
+          <strong>Lagring begynner å bli full</strong>
           <span>{storagePercent.toFixed(1)}% ledig lagring igjen</span>
         </div>
       </div>
@@ -3739,15 +3720,15 @@ PROJ-456;2026-05-11;2t`}</pre>
       <div className="end-day-checklist">
         <div className={activeEntry ? "warning" : "done"}>
           <Icon name={activeEntry ? "warning" : "check"} size={12} />
-          <span>{activeEntry ? (appLanguage === "en" ? "Active timer needs review" : "Aktiv timer mÃ¥ vurderes") : (appLanguage === "en" ? "No active timer" : "Ingen aktiv timer")}</span>
+          <span>{activeEntry ? (appLanguage === "en" ? "Active timer needs review" : "Aktiv timer må vurderes") : (appLanguage === "en" ? "No active timer" : "Ingen aktiv timer")}</span>
         </div>
         <div className={countdownSeconds > 0 ? "warning" : "done"}>
           <Icon name={countdownSeconds > 0 ? "warning" : "check"} size={12} />
-          <span>{countdownSeconds > 0 ? `${formatTimeShort(countdownSeconds)} ${appLanguage === "en" ? "remaining" : "mangler"}` : (appLanguage === "en" ? "Daily target reached" : "DagsmÃ¥l nÃ¥dd")}</span>
+          <span>{countdownSeconds > 0 ? `${formatTimeShort(countdownSeconds)} ${appLanguage === "en" ? "remaining" : "mangler"}` : (appLanguage === "en" ? "Daily target reached" : "Dagsmål nådd")}</span>
         </div>
         <div className={visibleTodoTasks.length > 0 ? "warning" : "done"}>
           <Icon name={visibleTodoTasks.length > 0 ? "warning" : "check"} size={12} />
-          <span>{visibleTodoTasks.length > 0 ? `${visibleTodoTasks.length} ${appLanguage === "en" ? "open tasks" : "Ã¥pne tasks"}` : (appLanguage === "en" ? "Tasks cleared" : "Tasks ryddet")}</span>
+          <span>{visibleTodoTasks.length > 0 ? `${visibleTodoTasks.length} ${appLanguage === "en" ? "open tasks" : "åpne tasks"}` : (appLanguage === "en" ? "Tasks cleared" : "Tasks ryddet")}</span>
         </div>
       </div>
 
@@ -4157,7 +4138,7 @@ PROJ-456;2026-05-11;2t`}</pre>
           >
             <option value="low">Lav</option>
             <option value="normal">Normal</option>
-            <option value="high">HÃ¸y</option>
+            <option value="high">Høy</option>
           </select>
 
           <input
@@ -4166,7 +4147,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             onChange={(event) =>
               setTodoDraft((prev) => ({ ...prev, reminder: event.target.value }))
             }
-            aria-label="PÃ¥minnelse"
+            aria-label="Påminnelse"
           />
         </div>
 
@@ -4296,7 +4277,7 @@ PROJ-456;2026-05-11;2t`}</pre>
           className="modal-close"
           onClick={() => setShowManualModal(false)}
         >
-          Ã—
+          ×
         </button>
       </div>
 
@@ -4979,38 +4960,6 @@ PROJ-456;2026-05-11;2t`}</pre>
           </div>
         )}
 
-        <div className="favorites-row" aria-label="Favorite tickets">
-          <span className="favorites-label">Favorites</span>
-          <div className="favorites-list">
-            {favoriteTickets.length ? (
-              favoriteTickets.map((ticket) => (
-                <div key={ticket.id} className="favorite-chip">
-                  <button
-                    type="button"
-                    className="favorite-chip-btn"
-                    onClick={() => handleSelectTicket(ticket)}
-                    title={ticket.title || ticket.id}
-                  >
-                    <Icon name="star" size={12} />
-                    <span>{ticket.id}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="favorite-chip-remove"
-                    onClick={() => toggleFavorite(ticket.id)}
-                    title={`Remove ${ticket.id} from favorites`}
-                  >
-                    <Icon name="close" size={10} />
-                  </button>
-                </div>
-              ))
-            ) : (
-              <span className="favorites-empty">Use the star to pin tickets here</span>
-            )}
-          </div>
-        </div>
-
         <div className="content-scroll">
           {message && (
             <p className={`message-toast ${messageTone}`}>
@@ -5097,63 +5046,6 @@ PROJ-456;2026-05-11;2t`}</pre>
 
           {!showManualModal && !editingEntryId && !handoverEntryId && (
             <>
-              <section className="section quick-capture-card">
-                <div className="quick-capture-label">
-                  <Icon name="ticket" size={14} />
-                  <span>Ticket</span>
-                </div>
-
-                <form
-                  className="quick-capture-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    startEntry(quickCaptureText);
-                    setQuickCaptureText("");
-                  }}
-                >
-                  <div className="quick-capture-input-wrap">
-                    <Icon name="ticket" size={13} />
-                    <input
-                      ref={quickCaptureRef}
-                      type="text"
-                      value={quickCaptureText}
-                      onChange={(event) => setQuickCaptureText(event.target.value)}
-                      placeholder={text.startTicketPlaceholder}
-                    />
-                    {quickCaptureText && (
-                      <button
-                        type="button"
-                        className="quick-capture-clear"
-                        onClick={() => setQuickCaptureText("")}
-                        title="Clear ticket"
-                      >
-                        <Icon name="close" size={11} />
-                      </button>
-                    )}
-                  </div>
-                  <button type="submit">
-                    <Icon name="play" size={12} />
-                    <span>Start</span>
-                  </button>
-                </form>
-
-                {quickCaptureTicketSuggestions.length > 0 && (
-                  <ul className="quick-ticket-suggestions">
-                    {quickCaptureTicketSuggestions.map((ticket) => (
-                      <li key={ticket.id}>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectQuickCaptureTicket(ticket)}
-                        >
-                          <strong>{ticket.id}</strong>
-                          {ticket.title && <span>{ticket.title}</span>}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-
               <section className="section remaining-card">
                 <div className="remaining-copy">
                   <div className="countdown-label">{text.remainingToday}</div>
@@ -5171,6 +5063,30 @@ PROJ-456;2026-05-11;2t`}</pre>
                   aria-label={`${Math.floor(remainingPercent)}% remaining`}
                 >
                   <span>{Math.floor(remainingPercent)}%</span>
+                </div>
+
+                <div className="top-sync-summary">
+                  <span className="sync-icon">
+                    <Icon name="cloudUpload" size={16} />
+                  </span>
+                  <div className="sync-copy">
+                    <strong>
+                      Jira Sync
+                      {pendingJiraWorklogEntries.length > 0 && (
+                        <span className="sync-pending-pill">{pendingJiraWorklogEntries.length} pending</span>
+                      )}
+                    </strong>
+                    <span>Manual sync only</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="sync-action"
+                    onClick={handleSyncJiraWorklogs}
+                    disabled={!canSyncJiraFromHome}
+                  >
+                    <Icon name="resetTimer" size={12} />
+                    <span>Sync</span>
+                  </button>
                 </div>
               </section>
 
@@ -5193,38 +5109,29 @@ PROJ-456;2026-05-11;2t`}</pre>
                     <span>{activeEntry ? text.running : text.startOrSelect}</span>
                   </div>
 
-                  <div className="active-ticket-time">
-                    {activeEntry ? formatTime(activeEntry.seconds) : "00:00:00"}
-                  </div>
+                  {activeEntry && (
+                    <div className="active-ticket-time">
+                      {formatTime(activeEntry.seconds)}
+                    </div>
+                  )}
                 </div>
 
-                <div className="active-ticket-actions">
-                  <button type="button" onClick={() => mainSearchRef.current?.focus()}>
-                    <Icon name="switch" size={12} />
-                    <span>{text.switchTicket}</span>
-                  </button>
-                  <button type="button" onClick={handlePauseCurrent} disabled={!activeEntry}>
-                    <Icon name="pause" size={12} />
-                    <span>Pause</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openHandoverEntry(activeEntry)}
-                    disabled={!activeEntry}
-                  >
-                    <Icon name="todo" size={12} />
-                    <span>{text.handover}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={() => activeEntryId != null && handleFinish(activeEntryId)}
-                    disabled={!activeEntry}
-                  >
-                    <Icon name="square" size={12} />
-                    <span>{text.done}</span>
-                  </button>
-                </div>
+                {activeEntry && (
+                  <div className="active-ticket-actions">
+                    <button type="button" onClick={handlePauseCurrent}>
+                      <Icon name="pause" size={12} />
+                      <span>Pause</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => activeEntryId != null && handleFinish(activeEntryId)}
+                    >
+                      <Icon name="square" size={12} />
+                      <span>{text.done}</span>
+                    </button>
+                  </div>
+                )}
               </section>
 
               {longRunningEntry && (
@@ -5268,7 +5175,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                         handleStartNewTicket();
                       }
                     }}
-                    placeholder="SÃ¸k eller skriv ticket (f.eks. KAN-9)"
+                    placeholder="Søk eller skriv ticket (f.eks. KAN-9)"
                   />
                   <span className="search-shortcut">/</span>
                 </div>
@@ -5307,7 +5214,6 @@ PROJ-456;2026-05-11;2t`}</pre>
                           color="green"
                           onClick={handleStartNewTicket}
                         />
-                        <span>Start tracking time on a ticket</span>
                       </div>
 
                       <div className="work-action-block">
@@ -5318,46 +5224,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                           color="dark"
                           onClick={() => openManual(selectedTicket || "")}
                         />
-                        <span>Add time without starting</span>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="work-controls-card sync-card">
-                    <span className="work-controls-label">Sync</span>
-                    <div className="sync-row">
-                      <span className="sync-icon">
-                        <Icon name="cloudUpload" size={20} />
-                      </span>
-                      <div className="sync-copy">
-                        <strong>
-                          Jira worklogs
-                          {pendingJiraWorklogEntries.length > 0 && (
-                            <span className="sync-pending-pill">{pendingJiraWorklogEntries.length} pending</span>
-                          )}
-                        </strong>
-                        <span>Manual sync only</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="sync-action"
-                        onClick={handleSyncJiraWorklogs}
-                        disabled={!canSyncJiraFromHome}
-                      >
-                        <Icon name="resetTimer" size={12} />
-                        <span>Sync</span>
-                      </button>
-                    </div>
-
-                    <div className="sync-meta-row">
-                      <span className="sync-mode-pill">
-                        <span className="sync-dot" />
-                        Manual sync
-                      </span>
-                      <button type="button" onClick={openSettingsView}>
-                        <Icon name="settings" size={11} />
-                        <span>Sync settings</span>
-                      </button>
                     </div>
                   </div>
 
@@ -5475,10 +5342,13 @@ PROJ-456;2026-05-11;2t`}</pre>
 
           <section className="section logged-section">
             <div className="logged-header">
-              <h2>{text.loggedTime}</h2>
-              <span>
-                Today {formatTimeShort(todayLoggedSeconds)}
-              </span>
+              <h2>Recent Activity</h2>
+              <div className="logged-header-actions">
+                <span>Today {formatTimeShort(todayLoggedSeconds)}</span>
+                <button type="button" onClick={openEndDayView}>
+                  View all
+                </button>
+              </div>
             </div>
 
             <div className="entry-list logged-list">

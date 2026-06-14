@@ -1,6 +1,6 @@
-/* ════════════════════════════════════════════════════════════════ */
-/* DESIGN HANDOFF – Time Logger                                     */
-/* ════════════════════════════════════════════════════════════════ */
+﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+/* DESIGN HANDOFF - Time Logger                                      */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 * {
     box-sizing: border-box;
@@ -194,7 +194,7 @@ body {
     flex-direction: column;
 }
 
-/* ─── WINDOW TITLEBAR ─── */
+/* â”€â”€â”€ WINDOW TITLEBAR â”€â”€â”€ */
 .window-titlebar {
     background: #272727;
     height: 30px;
@@ -257,7 +257,7 @@ body {
     color: #fff;
 }
 
-/* ─── MAIN WINDOW ─── */
+/* â”€â”€â”€ MAIN WINDOW â”€â”€â”€ */
 .container {
     background: #1e1e1e;
     display: flex;
@@ -284,7 +284,7 @@ body {
     max-height: none;
 }
 
-/* ─── TOP BAR ─── */
+/* â”€â”€â”€ TOP BAR â”€â”€â”€ */
 .header {
     background: #272727;
     height: 30px;
@@ -383,7 +383,7 @@ body {
     top: -7px;
 }
 
-/* ─── CONTENT SECTION ─── */
+/* â”€â”€â”€ CONTENT SECTION â”€â”€â”€ */
 .content-scroll {
     flex: 1;
     overflow-y: auto;
@@ -2666,7 +2666,7 @@ body {
     letter-spacing: 0.02em;
 }
 
-/* ─── SHORTCUTS PANEL ─── */
+/* â”€â”€â”€ SHORTCUTS PANEL â”€â”€â”€ */
 .shortcuts-panel {
     background: #252525;
     border: 1px solid rgba(255, 255, 255, 0.07);
@@ -2696,7 +2696,7 @@ body {
     font-weight: 600;
 }
 
-/* ─── FAVORITES ROW ─── */
+/* â”€â”€â”€ FAVORITES ROW â”€â”€â”€ */
 .home-shortcuts {
     align-items: center;
     display: flex;
@@ -2988,7 +2988,7 @@ body {
     color: #ff9b9b;
 }
 
-/* ─── COUNTDOWN SECTION ─── */
+/* â”€â”€â”€ COUNTDOWN SECTION â”€â”€â”€ */
 .countdown-label {
     color: #888;
     font-size: 11.5px;
@@ -3007,7 +3007,7 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
-/* ─── SEARCH ─── */
+/* â”€â”€â”€ SEARCH â”€â”€â”€ */
 .countdown-timer.pulse {
     animation: countdown-recalculate 760ms ease-out both;
 }
@@ -3130,7 +3130,7 @@ body {
     border-color: rgba(245, 166, 35, 0.32);
 }
 
-/* ─── BUTTONS ─── */
+/* â”€â”€â”€ BUTTONS â”€â”€â”€ */
 .main-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -3193,7 +3193,7 @@ body {
     grid-column: 1 / -1;
 }
 
-/* ─── SECONDARY ACTIONS ─── */
+/* â”€â”€â”€ SECONDARY ACTIONS â”€â”€â”€ */
 .secondary-actions {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
@@ -3236,7 +3236,7 @@ body {
     background: #c0392b;
 }
 
-/* ─── TIMER ─── */
+/* â”€â”€â”€ TIMER â”€â”€â”€ */
 .timer {
     color: #5ab4ff;
     font-size: 26px;
@@ -3247,14 +3247,14 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
-/* ─── DIVIDER ─── */
+/* â”€â”€â”€ DIVIDER â”€â”€â”€ */
 .section-divider {
     margin: 12px;
     height: 1px;
     background: rgba(255, 255, 255, 0.06);
 }
 
-/* ─── LOGGED TICKETS ─── */
+/* â”€â”€â”€ LOGGED TICKETS â”€â”€â”€ */
 .entry-list {
     list-style: none;
     padding: 0;
@@ -3264,7 +3264,7 @@ body {
     align-items: baseline;
     display: flex;
     justify-content: space-between;
-    margin-bottom: 12px;
+    margin-bottom: 9px;
 }
 
 .logged-header h2 {
@@ -3284,16 +3284,37 @@ body {
     font-weight: 700;
 }
 
+.logged-header-actions {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+}
+
+.logged-header-actions button {
+    background: transparent;
+    border: 0;
+    color: #5ea1ff;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 800;
+    padding: 0;
+}
+
+.logged-header-actions button:hover {
+    color: #9fc9ff;
+}
+
 .logged-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
 }
 
 .entry-group + .entry-group {
     border-top: 1px solid var(--theme-border);
-    margin-top: 16px;
-    padding-top: 12px;
+    margin-top: 12px;
+    padding-top: 10px;
 }
 
 .entry-group-header {
@@ -3301,7 +3322,7 @@ body {
     display: flex;
     gap: 6px;
     justify-content: flex-start;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
 .entry-group-total-inline::before {
@@ -3313,7 +3334,7 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     max-height: 72px;
     overflow: hidden;
-    padding: 9px 2px;
+    padding: 7px 2px;
     transition: border-color 0.13s, background 0.13s, box-shadow 0.13s, transform 0.16s;
 }
 
@@ -3561,7 +3582,7 @@ body {
     color: #e05c4b;
 }
 
-/* ─── MESSAGE ─── */
+/* â”€â”€â”€ MESSAGE â”€â”€â”€ */
 .message {
     color: #aaa;
     font-size: 11.5px;
@@ -3571,7 +3592,7 @@ body {
     min-height: 20px;
 }
 
-/* ─── MANUAL ENTRY MODAL ─── */
+/* â”€â”€â”€ MANUAL ENTRY MODAL â”€â”€â”€ */
 .manual-entry-top {
     background: transparent;
     border: none;
@@ -3699,9 +3720,9 @@ body {
     opacity: 0.92;
 }
 
-/* ════════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 /* MINI MODE                                                        */
-/* ════════════════════════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 .mini-shell {
     background: #1e1e1e;
@@ -3901,7 +3922,7 @@ body {
     padding: 0;
 }
 
-/* ─── SHARED TRANSITIONS ─── */
+/* â”€â”€â”€ SHARED TRANSITIONS â”€â”€â”€ */
 button {
     transition: all 0.13s ease;
 }
@@ -3934,7 +3955,7 @@ input {
     background: linear-gradient(180deg, var(--theme-purple), var(--theme-blue));
 }
 
-/* ─── FONT SIZING ─── */
+/* â”€â”€â”€ FONT SIZING â”€â”€â”€ */
 html {
     font-size: 13px;
 }
@@ -5207,14 +5228,14 @@ body {
 }
 
 .logged-list {
-    gap: 6px;
+    gap: 5px;
 }
 
 .entry-item {
     background: rgba(12, 17, 27, 0.76);
     border-bottom-color: var(--theme-border);
     border-radius: 7px;
-    padding: 9px 8px;
+    padding: 7px 8px;
 }
 
 .entry-item.running {
@@ -5505,8 +5526,8 @@ body {
 }
 
 .home-view {
-    gap: 8px;
-    padding: 12px;
+    gap: 6px;
+    padding: 8px 12px 12px;
 }
 
 .home-view > .section:first-of-type,
@@ -5525,12 +5546,13 @@ body {
 
 .remaining-card {
     align-items: center;
-    background: linear-gradient(145deg, rgba(24, 20, 49, 0.98), rgba(15, 18, 31, 0.98));
-    display: flex;
-    justify-content: space-between;
-    min-height: 62px;
-    order: 3;
-    padding: 10px 12px;
+    background: linear-gradient(145deg, rgba(12, 20, 34, 0.98), rgba(8, 13, 24, 0.98));
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    min-height: 58px;
+    order: 1;
+    padding: 9px 12px;
 }
 
 .remaining-copy {
@@ -5541,13 +5563,13 @@ body {
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.08em;
-    margin: 0 0 4px;
+    margin: 0 0 3px;
     text-align: left;
     text-transform: uppercase;
 }
 
 .remaining-card .countdown-timer {
-    font-size: 24px;
+    font-size: 20px;
     line-height: 1;
     margin: 0;
     text-align: left;
@@ -5555,8 +5577,8 @@ body {
 
 .countdown-subtext {
     color: var(--theme-muted);
-    font-size: 11px;
-    margin-top: 4px;
+    font-size: 10px;
+    margin-top: 2px;
 }
 
 .remaining-ring {
@@ -5567,21 +5589,31 @@ body {
     border-radius: 50%;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 18px rgba(47, 125, 255, 0.12);
     color: #dce4ff;
-    display: flex;
+    display: none;
     flex-shrink: 0;
     font-size: 12px;
     font-weight: 800;
-    height: 38px;
+    height: 34px;
     justify-content: center;
-    width: 38px;
+    width: 34px;
+}
+
+.top-sync-summary {
+    align-items: center;
+    border-left: 1px solid rgba(139, 92, 255, 0.18);
+    display: grid;
+    gap: 7px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-width: 0;
+    padding-left: 10px;
 }
 
 .active-ticket-card {
     background: linear-gradient(145deg, rgba(13, 18, 29, 0.98), rgba(8, 12, 20, 0.98));
     border-color: rgba(139, 92, 255, 0.42);
     box-shadow: 0 0 0 1px rgba(47, 125, 255, 0.11), 0 12px 26px rgba(0, 0, 0, 0.2);
-    order: 1;
-    padding: 14px;
+    order: 2;
+    padding: 10px 12px;
 }
 
 .active-ticket-card.running {
@@ -5597,7 +5629,7 @@ body {
 
 .active-ticket-header {
     justify-content: space-between;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .active-ticket-kicker {
@@ -5628,15 +5660,19 @@ body {
     color: var(--theme-purple);
     cursor: pointer;
     display: flex;
-    height: 24px;
+    height: 22px;
     justify-content: center;
-    width: 24px;
+    width: 22px;
 }
 
 .active-ticket-body {
     gap: 12px;
     justify-content: space-between;
-    margin-bottom: 14px;
+    margin-bottom: 10px;
+}
+
+.active-ticket-card:not(.running) .active-ticket-body {
+    margin-bottom: 0;
 }
 
 .active-ticket-main {
@@ -5646,7 +5682,7 @@ body {
 .active-ticket-main strong {
     color: var(--theme-text);
     display: block;
-    font-size: 17px;
+    font-size: 15.5px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -5656,7 +5692,7 @@ body {
     color: var(--theme-muted);
     display: block;
     font-size: 11px;
-    margin-top: 6px;
+    margin-top: 4px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -5668,14 +5704,14 @@ body {
     background-clip: text;
     color: transparent;
     flex-shrink: 0;
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     line-height: 1;
 }
 
 .active-ticket-actions {
-    gap: 8px;
+    gap: 10px;
 }
 
 .active-ticket-actions button {
@@ -5691,7 +5727,7 @@ body {
     font-size: 11px;
     font-weight: 700;
     gap: 6px;
-    height: 34px;
+    height: 30px;
     justify-content: center;
 }
 
@@ -5713,14 +5749,22 @@ body {
 }
 
 .ticket-controls {
-    background: transparent;
-    border-bottom: 0;
-    order: 4;
-    padding: 0;
+    background: linear-gradient(145deg, rgba(13, 20, 34, 0.92), rgba(8, 14, 24, 0.98));
+    border: 1px solid rgba(139, 92, 255, 0.14);
+    border-radius: 8px;
+    order: 3;
+    padding: 9px 12px 10px;
 }
 
 .ticket-controls .search-row {
-    margin-bottom: 8px;
+    margin-bottom: 7px;
+}
+
+.ticket-controls .search-row input {
+    border-radius: 7px;
+    font-size: 11.5px;
+    padding-bottom: 7px;
+    padding-top: 7px;
 }
 
 .ticket-controls .main-actions {
@@ -5729,54 +5773,44 @@ body {
 
 .work-controls-stack {
     display: grid;
-    gap: 9px;
-    margin-top: 8px;
+    gap: 7px;
+    margin-top: 0;
 }
 
 .work-controls-card {
-    background: linear-gradient(145deg, rgba(13, 20, 34, 0.92), rgba(8, 14, 24, 0.98));
-    border: 1px solid rgba(139, 92, 255, 0.16);
-    border-radius: 8px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
     display: grid;
-    gap: 10px;
-    padding: 11px;
+    gap: 0;
+    padding: 0;
 }
 
 .work-controls-label {
     color: #7f93a8;
-    display: block;
     font-size: 10px;
     font-weight: 900;
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
 
+.ticket-controls .work-controls-label {
+    display: none;
+}
+
 .work-actions {
     display: grid;
-    gap: 7px;
+    gap: 10px;
     grid-template-columns: 1fr 1fr;
 }
 
 .work-action-block {
     display: grid;
-    gap: 5px;
     min-width: 0;
 }
 
 .work-action-block > span {
-    color: #8391a4;
-    font-size: 9.6px;
-    line-height: 1.25;
-    min-height: 13px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.work-action-block.primary > span::before {
-    color: #f5c744;
-    content: "⚡";
-    margin-right: 4px;
+    display: none;
 }
 
 .work-action-block .btn-shortcut-key {
@@ -5786,6 +5820,10 @@ body {
     padding: 2px 4px;
     right: 7px;
     top: 6px;
+}
+
+.ticket-controls .main-btn {
+    height: 36px;
 }
 
 .sync-card {
@@ -5830,6 +5868,9 @@ body {
     gap: 7px;
     margin-top: 2px;
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .sync-copy span:not(.work-controls-label) {
@@ -5867,6 +5908,47 @@ body {
     justify-content: center;
     min-width: 68px;
     padding: 0 10px;
+}
+
+.top-sync-summary .sync-icon {
+    color: #43b583;
+    width: 20px;
+}
+
+.top-sync-summary .sync-copy strong {
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.top-sync-summary .sync-copy span:not(.work-controls-label) {
+    font-size: 10px;
+}
+
+.top-sync-summary .sync-pending-pill {
+    background: rgba(32, 165, 82, 0.16);
+    border-color: rgba(32, 165, 82, 0.26);
+    color: #62d27f !important;
+    padding: 3px 6px;
+}
+
+.top-sync-summary .sync-action {
+    height: 28px;
+    min-width: 58px;
+    padding: 0 8px;
+}
+
+@media (max-width: 460px) {
+    .remaining-card {
+        align-items: stretch;
+        grid-template-columns: 1fr;
+    }
+
+    .top-sync-summary {
+        border-left: 0;
+        border-top: 1px solid rgba(139, 92, 255, 0.18);
+        padding-left: 0;
+        padding-top: 8px;
+    }
 }
 
 .sync-action:hover:not(:disabled) {
@@ -5951,7 +6033,7 @@ body {
 .logged-section {
     background: transparent;
     border-bottom: 0;
-    order: 6;
+    order: 4;
     padding: 0;
 }
 

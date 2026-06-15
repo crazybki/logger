@@ -4,6 +4,17 @@ En lokal React/Electron-app for timeføring.
 
 English setup guide: [README.en.md](README.en.md)
 
+## Endringer 2026-06-15
+
+- Aktiv Jira-ticket viser nå status som `Working on issue ADP-xxxxx` når en trygg issue key kan parses. Hvis ikke brukes vanlig ticket-navn.
+- Ticket-søk er forbedret: resultater vises først når brukeren skriver, skjules etter valg, og kan navigeres med pil opp/ned og Enter.
+- Jira-feil ved test, fetch og sync vises tydeligere som error og har mer konkrete meldinger for manglende credentials, ugyldig URL, `401/403` og nettverksfeil.
+- Jira Cloud URL kan skrives som bare firmanavn, for eksempel `company`, og normaliseres til `https://company.atlassian.net`. Full URL virker fortsatt, og Server/Data Center tvinges ikke til Atlassian Cloud.
+- Jira API token/PAT vises tryggere i UI: tokenet returneres ikke til renderer, og feltet viser bare at token er lagret.
+- Notification Center v1 er lagt til i headeren. Toast-meldinger vises fortsatt kort, men Jira/Tempo/import/settings/update-hendelser lagres og kan leses som in-memory historikk. Meldinger lagres ikke til disk og saniteres for URL-er, e-post og token-lignende tekst.
+- Toppkortet er ryddet opp slik at `Gjenstår i dag` og `Jira Sync` vises side om side ved normal appbredde. Teksten `of 07:30:00` er fjernet.
+- Jira worklog update etter tidsendring er ikke implementert ennå. Eksisterende Jira create/sync-logikk er beholdt.
+
 ## Dette må installeres
 
 Installer disse verktøyene før du starter:

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icons';
 
-export const PillMenu = ({ onManual, onMiniMode, onExport, onImportTickets, onClearLogs, onTrash, onResetCountdown, onMissingTime, onReports, onSettings, onReminderInbox, onEndDay, reminderBadge = 0, language = 'no', size = 'normal' }) => {
+export const PillMenu = ({ onManual, onMiniMode, onExport, onImportTickets, onClearLogs, onTrash, onResetCountdown, onMissingTime, onReports, onSettings, onReminderInbox, onEndDay, reminderBadge = 0, language = 'en', size = 'normal' }) => {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
     const iconSize = size === 'small' ? 12 : 14;

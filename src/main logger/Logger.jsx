@@ -79,6 +79,20 @@ const UI_TEXT = {
     active: "aktive",
     noneActiveTasks: "Ingen aktive tasks",
     loggedTime: "Logget tid",
+    notifications: "Varsler",
+    unread: "ulest",
+    allRead: "Alt lest",
+    markAllRead: "Marker alle lest",
+    clearAll: "Tøm alle",
+    noNotifications: "Ingen varsler",
+    jiraSync: "Jira Sync",
+    synced: "Synket",
+    pending: "venter",
+    sync: "Synk",
+    ticketSearchPlaceholder: "Søk eller skriv ticket (f.eks. KAN-9)",
+    recentActivity: "Siste aktivitet",
+    viewAll: "Vis alle",
+    noTimeLoggedYet: "Ingen tid logget ennå",
   },
   en: {
     reminders: "Reminders",
@@ -128,6 +142,20 @@ const UI_TEXT = {
     active: "active",
     noneActiveTasks: "No active tasks",
     loggedTime: "Logged time",
+    notifications: "Notifications",
+    unread: "unread",
+    allRead: "All read",
+    markAllRead: "Mark all read",
+    clearAll: "Clear all",
+    noNotifications: "No notifications",
+    jiraSync: "Jira Sync",
+    synced: "Synced",
+    pending: "pending",
+    sync: "Sync",
+    ticketSearchPlaceholder: "Search or type ticket (e.g. KAN-9)",
+    recentActivity: "Recent Activity",
+    viewAll: "View all",
+    noTimeLoggedYet: "No time logged yet",
   },
 };
 
@@ -193,9 +221,9 @@ function Logger() {
   });
   const [appLanguage, setAppLanguage] = useState(() => {
     try {
-      return localStorage.getItem("appLanguage") || "no";
+      return localStorage.getItem("appLanguage") || "en";
     } catch {
-      return "no";
+      return "en";
     }
   });
   const [jiraStatus, setJiraStatus] = useState({
@@ -317,7 +345,7 @@ function Logger() {
   const [handoverNextSteps, setHandoverNextSteps] = useState("");
   const [handoverEditMode, setHandoverEditMode] = useState(false);
 
-  const text = UI_TEXT[appLanguage] || UI_TEXT.no;
+  const text = UI_TEXT[appLanguage] || UI_TEXT.en;
 
   const manualTicketRef = useRef(null);
   const mainSearchRef = useRef(null);
@@ -349,6 +377,22 @@ function Logger() {
     return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
   }
 
+  function normalizeExternalErrorText(value) {
+    return String(value ?? "")
+      .replace(/Arbeidslogg kan ikke være null\.?/gi, "Worklog cannot be null.")
+      .replace(/Du må angi ([A-Za-z0-9_.-]+)\.?/gi, "You must provide $1.")
+      .replace(/\bbrukt arbeidstid\b/gi, "time spent")
+      .replace(/kan ikke være null\.?/gi, "cannot be null.")
+      .replace(/må være større enn 0\.?/gi, "must be greater than 0.")
+      .replace(/må være større enn null\.?/gi, "must be greater than zero.");
+  }
+
+  function getDisplayErrorMessage(value) {
+    const message = String(value ?? "");
+    if (appLanguage !== "en") return message;
+    return normalizeExternalErrorText(message);
+  }
+
   function addNotification({ type = "info", title = "", message = "", source = "app" } = {}) {
     const allowedTypes = new Set(["error", "warning", "success", "info"]);
     const allowedSources = new Set(["jira", "tempo", "app", "import", "update"]);
@@ -367,13 +411,15 @@ function Logger() {
   }
 
   function notify({ type = "info", title = "", message: notificationMessage = "", source = "app", toastMessage = "" } = {}) {
-    const toast = sanitizeNotificationText(toastMessage || notificationMessage || title, 160);
+    const displayMessage = type === "error" ? getDisplayErrorMessage(notificationMessage) : notificationMessage;
+    const displayToastMessage = type === "error" ? getDisplayErrorMessage(toastMessage || displayMessage || title) : toastMessage;
+    const toast = sanitizeNotificationText(displayToastMessage || displayMessage || title, 160);
     setMessageTone(type === "success" || type === "error" ? type : "default");
     setMessage(toast);
     addNotification({
       type,
       title,
-      message: notificationMessage || toast,
+      message: displayMessage || toast,
       source,
     });
   }
@@ -2722,7 +2768,7 @@ function Logger() {
     setTrashRetentionDays(nextSettings.trashRetentionDays);
     setThemePreset(nextSettings.themePreset);
     setThemeAccentColor(nextSettings.themeAccentColor);
-    setAppLanguage(nextSettings.appLanguage || "no");
+    setAppLanguage(nextSettings.appLanguage || "en");
     setShowSettingsView(false);
     notify({
       type: "success",
@@ -2733,14 +2779,15 @@ function Logger() {
   }
 
   function setJiraErrorFeedback(message, title = "Jira failed") {
+    const displayMessage = getDisplayErrorMessage(message);
     notify({
       type: "error",
       title,
-      message,
+      message: displayMessage,
       source: "jira",
     });
     setJiraFeedbackTone("error");
-    setJiraFeedback(message);
+    setJiraFeedback(displayMessage);
   }
 
   function setJiraDefaultFeedback(message) {
@@ -2898,7 +2945,7 @@ function Logger() {
       const failedCount = results.filter((item) => !item.success).length;
       const firstFailure = results.find((item) => !item.success);
       const failureText = firstFailure
-        ? ` First failure: ${firstFailure.issueKey || "entry"} - ${firstFailure.error || "Unknown error"}`
+        ? ` First failure: ${firstFailure.issueKey || "entry"} - ${getDisplayErrorMessage(firstFailure.error || "Unknown error")}`
         : "";
 
       if (!result?.ok || failedCount) {
@@ -4904,8 +4951,8 @@ PROJ-456;2026-05-11;2t`}</pre>
         type="button"
         className={`notification-bell-btn ${showNotificationCenter ? "active" : ""} ${unreadErrorCount ? "has-errors" : ""}`}
         onClick={() => setShowNotificationCenter((prev) => !prev)}
-        title="Notifications"
-        aria-label="Notifications"
+        title={text.notifications}
+        aria-label={text.notifications}
         aria-expanded={showNotificationCenter}
       >
         <Icon name="bell" size={15} />
@@ -4915,18 +4962,18 @@ PROJ-456;2026-05-11;2t`}</pre>
       </button>
 
       {showNotificationCenter && (
-        <div className="notification-panel" role="dialog" aria-label="Notifications">
+        <div className="notification-panel" role="dialog" aria-label={text.notifications}>
           <div className="notification-panel-header">
             <div>
-              <strong>Notifications</strong>
-              <span>{unreadNotificationCount ? `${unreadNotificationCount} unread` : "All read"}</span>
+              <strong>{text.notifications}</strong>
+              <span>{unreadNotificationCount ? `${unreadNotificationCount} ${text.unread}` : text.allRead}</span>
             </div>
             <div className="notification-panel-actions">
               <button type="button" onClick={markAllNotificationsRead} disabled={!unreadNotificationCount}>
-                Mark all read
+                {text.markAllRead}
               </button>
               <button type="button" onClick={clearNotifications} disabled={!notifications.length}>
-                Clear all
+                {text.clearAll}
               </button>
             </div>
           </div>
@@ -4953,7 +5000,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               ))}
             </ul>
           ) : (
-            <p className="notification-empty">No notifications</p>
+            <p className="notification-empty">{text.noNotifications}</p>
           )}
         </div>
       )}
@@ -5338,11 +5385,11 @@ PROJ-456;2026-05-11;2t`}</pre>
                     <Icon name="cloudUpload" size={16} />
                   </span>
                   <div className="sync-copy">
-                    <strong>Jira Sync</strong>
+                    <strong>{text.jiraSync}</strong>
                     <span>
                       {pendingJiraWorklogEntries.length > 0
-                        ? `${pendingJiraWorklogEntries.length} pending`
-                        : "Synced"}
+                        ? `${pendingJiraWorklogEntries.length} ${text.pending}`
+                        : text.synced}
                     </span>
                   </div>
                   <button
@@ -5352,7 +5399,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                     disabled={!canSyncJiraFromHome}
                   >
                     <Icon name="resetTimer" size={12} />
-                    <span>Sync</span>
+                    <span>{text.sync}</span>
                   </button>
                 </div>
               </section>
@@ -5435,7 +5482,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onFocus={() => setIsSearchOpen(Boolean(search.trim()))}
                     onKeyDown={handleSearchKeyDown}
-                    placeholder="Søk eller skriv ticket (f.eks. KAN-9)"
+                    placeholder={text.ticketSearchPlaceholder}
                     aria-activedescendant={
                       highlightedTicketIndex >= 0 && visibleSearchTickets[highlightedTicketIndex]
                         ? `ticket-search-${visibleSearchTickets[highlightedTicketIndex].id}`
@@ -5528,7 +5575,7 @@ PROJ-456;2026-05-11;2t`}</pre>
 
           {SHOW_COUNTDOWN_SECTION && !showManualModal && (
             <section className="section">
-              <div className="countdown-label">Remaining today</div>
+              <div className="countdown-label">{text.remainingToday}</div>
               <div className={`countdown-timer ${countdownPulse ? "pulse" : ""}`}>
                 {formatTime(countdownSeconds)}
               </div>
@@ -5617,18 +5664,18 @@ PROJ-456;2026-05-11;2t`}</pre>
 
           <section className="section logged-section">
             <div className="logged-header">
-              <h2>Recent Activity</h2>
+              <h2>{text.recentActivity}</h2>
               <div className="logged-header-actions">
-                <span>Today {formatTimeShort(todayLoggedSeconds)}</span>
+                <span>{text.today} {formatTimeShort(todayLoggedSeconds)}</span>
                 <button type="button" onClick={openEndDayView}>
-                  View all
+                  {text.viewAll}
                 </button>
               </div>
             </div>
 
             <div className="entry-list logged-list">
               {activeEntries.length === 0 && (
-                <p className="logged-empty">No time logged yet</p>
+                <p className="logged-empty">{text.noTimeLoggedYet}</p>
               )}
 
               {Object.entries(groupedLoggedEntries).map(([date, dayEntries]) => {

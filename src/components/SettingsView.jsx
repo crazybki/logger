@@ -16,7 +16,7 @@ export function SettingsView({
   trashRetentionDays,
   themePreset,
   themeAccentColor,
-  appLanguage = "no",
+  appLanguage = "en",
   accentColors,
   jiraStatus = {},
   jiraFeedback = "",
@@ -86,7 +86,7 @@ export function SettingsView({
         jiraCloudSecret: "Jira Cloud API token",
         jiraServerSecret: "Jira Server/DC PAT or password",
         jiraTokenSaved: "Token saved",
-        jiraTokenSavedPlaceholder: "•••••••• saved",
+        jiraTokenSavedPlaceholder: "******** saved",
         jiraTokenMissing: "No credential saved",
         saveJira: "Save Jira",
         testJira: "Test connection",
@@ -166,7 +166,7 @@ export function SettingsView({
         jiraCloudSecret: "Jira Cloud API token",
         jiraServerSecret: "Jira Server/DC PAT eller passord",
         jiraTokenSaved: "Token lagret",
-        jiraTokenSavedPlaceholder: "•••••••• lagret",
+        jiraTokenSavedPlaceholder: "******** lagret",
         jiraTokenMissing: "Ingen credential lagret",
         saveJira: "Lagre Jira",
         testJira: "Test tilkobling",
@@ -215,7 +215,7 @@ export function SettingsView({
   const [retentionDays, setRetentionDays] = useState(String(trashRetentionDays));
   const [selectedThemePreset, setSelectedThemePreset] = useState(themePreset || "default");
   const [selectedAccentColor, setSelectedAccentColor] = useState(themeAccentColor || "");
-  const [selectedLanguage, setSelectedLanguage] = useState(appLanguage || "no");
+  const [selectedLanguage, setSelectedLanguage] = useState(appLanguage || "en");
   const [jiraMode, setJiraMode] = useState(jiraStatus.jiraMode || "cloud");
   const [jiraAuthMethod, setJiraAuthMethod] = useState(jiraStatus.jiraAuthMethod || "bearer");
   const [jiraBaseUrl, setJiraBaseUrl] = useState(jiraStatus.jiraBaseUrl || "");
@@ -230,7 +230,7 @@ export function SettingsView({
     setRetentionDays(String(trashRetentionDays));
     setSelectedThemePreset(themePreset || "default");
     setSelectedAccentColor(themeAccentColor || "");
-    setSelectedLanguage(appLanguage || "no");
+    setSelectedLanguage(appLanguage || "en");
   }, [appLanguage, dailyTargetSeconds, themeAccentColor, themePreset, trashRetentionDays]);
 
   useEffect(() => {

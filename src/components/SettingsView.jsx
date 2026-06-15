@@ -20,6 +20,7 @@ export function SettingsView({
   accentColors,
   jiraStatus = {},
   jiraFeedback = "",
+  jiraFeedbackTone = "default",
   tempoStatus = {},
   tempoFeedback = "",
   tempoSyncResults = [],
@@ -84,7 +85,8 @@ export function SettingsView({
         jiraServerIdentityOptional: "Jira Server/DC username (optional for PAT)",
         jiraCloudSecret: "Jira Cloud API token",
         jiraServerSecret: "Jira Server/DC PAT or password",
-        jiraTokenSaved: "Credential saved",
+        jiraTokenSaved: "Token saved",
+        jiraTokenSavedPlaceholder: "•••••••• saved",
         jiraTokenMissing: "No credential saved",
         saveJira: "Save Jira",
         testJira: "Test connection",
@@ -163,7 +165,8 @@ export function SettingsView({
         jiraServerIdentityOptional: "Jira Server/DC brukernavn (valgfritt for PAT)",
         jiraCloudSecret: "Jira Cloud API token",
         jiraServerSecret: "Jira Server/DC PAT eller passord",
-        jiraTokenSaved: "Credential lagret",
+        jiraTokenSaved: "Token lagret",
+        jiraTokenSavedPlaceholder: "•••••••• lagret",
         jiraTokenMissing: "Ingen credential lagret",
         saveJira: "Lagre Jira",
         testJira: "Test tilkobling",
@@ -566,8 +569,8 @@ export function SettingsView({
             <label className="settings-single-input">
               <span>{text.jiraBaseUrl}</span>
               <input
-                type="url"
-                placeholder={jiraMode === "server" ? "https://jira.example.com/jira" : "https://company.atlassian.net"}
+                type={jiraMode === "server" ? "url" : "text"}
+                placeholder={jiraMode === "server" ? "https://jira.example.com/jira" : "company or https://company.atlassian.net"}
                 value={jiraBaseUrl}
                 onChange={(event) => setJiraBaseUrl(event.target.value)}
                 autoComplete="off"
@@ -595,7 +598,7 @@ export function SettingsView({
                 value={jiraApiToken}
                 onChange={(event) => setJiraApiToken(event.target.value)}
                 autoComplete="new-password"
-                placeholder={jiraStatus.hasJiraApiToken ? text.jiraTokenSaved : ""}
+                placeholder={jiraStatus.hasJiraApiToken ? text.jiraTokenSavedPlaceholder : ""}
               />
             </label>
           </div>
@@ -614,7 +617,7 @@ export function SettingsView({
           </div>
 
           {jiraFeedback && (
-            <div className="jira-feedback" role="status">
+            <div className={`jira-feedback ${jiraFeedbackTone === "error" ? "error" : ""}`} role="status">
               {jiraFeedback}
             </div>
           )}

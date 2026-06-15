@@ -375,11 +375,22 @@ async function getTempoSecureValues() {
   return values;
 }
 
-function sanitizeJiraBaseUrl(value) {
+function sanitizeJiraBaseUrl(value, jiraMode = "cloud") {
   const trimmedValue = truncateText(value, 300).replace(/\/+$/, "");
   if (!trimmedValue) return "";
 
-  const parsedUrl = new URL(trimmedValue);
+  const cloudSiteMatch = trimmedValue.match(/^[a-z0-9][a-z0-9-]*$/i);
+  const urlValue = jiraMode !== "server" && cloudSiteMatch
+    ? `https://${trimmedValue.toLowerCase()}.atlassian.net`
+    : trimmedValue;
+  let parsedUrl;
+
+  try {
+    parsedUrl = new URL(urlValue);
+  } catch {
+    throw new Error("Jira URL is invalid. Use https://company.atlassian.net, or just company for Jira Cloud.");
+  }
+
   if (parsedUrl.protocol !== "https:") {
     throw new Error("Jira base URL must use HTTPS");
   }
@@ -455,13 +466,13 @@ async function getJiraConnectionDetails() {
   const values = await getJiraSecureValues();
   const jiraMode = sanitizeJiraMode(values.jiraMode);
   const jiraAuthMethod = jiraMode === "server" ? sanitizeJiraAuthMethod(values.jiraAuthMethod) : "bearer";
-  const jiraBaseUrl = sanitizeJiraBaseUrl(values.jiraBaseUrl);
+  const jiraBaseUrl = sanitizeJiraBaseUrl(values.jiraBaseUrl, jiraMode);
   const jiraEmail = jiraMode === "cloud" ? sanitizeJiraEmail(values.jiraEmail) : sanitizeJiraUsername(values.jiraEmail);
   const jiraApiToken = sanitizeJiraApiToken(values.jiraApiToken);
   const requiresUser = jiraMode === "cloud" || jiraAuthMethod === "basic";
 
   if (!jiraBaseUrl || (requiresUser && !jiraEmail) || !jiraApiToken) {
-    throw new Error("Jira credentials are incomplete");
+    throw new Error("Jira credentials are incomplete. Fill in Jira URL, user/email, and API token/PAT.");
   }
 
   return {
@@ -1076,6 +1087,14 @@ function normalizeTempoConnectionInfo(body = {}) {
 }
 
 async function getJiraResponseError(response) {
+  if (response.status === 401) {
+    return "Jira authentication failed (401). Check your email/username and API token/PAT.";
+  }
+
+  if (response.status === 403) {
+    return "Jira permission denied (403). Your account may not have access to this project or worklogs.";
+  }
+
   const fallback = `Jira request failed with status ${response.status}`;
 
   try {
@@ -1100,6 +1119,28 @@ async function getJiraResponseError(response) {
       return fallback;
     }
   }
+}
+
+function getJiraRequestError(error) {
+  const message = String(error?.message || "Jira request failed");
+
+  if (/credentials are incomplete/i.test(message)) {
+    return message;
+  }
+
+  if (/invalid url|jira url is invalid|failed to parse url/i.test(message)) {
+    return "Jira URL is invalid. Use https://company.atlassian.net, or just company for Jira Cloud.";
+  }
+
+  if (/must use HTTPS/i.test(message)) {
+    return "Jira URL must use HTTPS.";
+  }
+
+  if (/fetch failed|network|ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ECONNRESET/i.test(message)) {
+    return "Could not reach Jira. Check the URL and your network connection.";
+  }
+
+  return message;
 }
 
 async function getTempoResponseError(response) {
@@ -1368,7 +1409,8 @@ ipcMain.handle("jira-secure-store:set", async (_, credentials = {}) => {
     }
 
     if (Object.prototype.hasOwnProperty.call(credentials, "jiraBaseUrl")) {
-      nextValues.jiraBaseUrl = sanitizeJiraBaseUrl(credentials.jiraBaseUrl);
+      const jiraMode = sanitizeJiraMode(credentials.jiraMode || nextValues.jiraMode);
+      nextValues.jiraBaseUrl = sanitizeJiraBaseUrl(credentials.jiraBaseUrl, jiraMode);
     }
 
     if (Object.prototype.hasOwnProperty.call(credentials, "jiraEmail")) {
@@ -1399,7 +1441,7 @@ ipcMain.handle("jira-secure-store:set", async (_, credentials = {}) => {
     const values = await getJiraSecureValues();
     return { ok: true, values: getJiraCredentialsStatus(values) };
   } catch (error) {
-    return { ok: false, error: error.message };
+    return { ok: false, error: getJiraRequestError(error) };
   }
 });
 
@@ -1665,7 +1707,7 @@ ipcMain.handle("jira:test-connection", async () => {
     return {
       ok: false,
       success: false,
-      error: error.message,
+      error: getJiraRequestError(error),
     };
   }
 });
@@ -1733,7 +1775,7 @@ ipcMain.handle("jira:list-projects", async () => {
     return {
       ok: false,
       success: false,
-      error: error.message,
+      error: getJiraRequestError(error),
       projects: [],
     };
   }
@@ -1896,7 +1938,7 @@ ipcMain.handle("jira:fetch-tickets", async (_, options = {}) => {
     return {
       ok: false,
       success: false,
-      error: error.message,
+      error: getJiraRequestError(error),
       tickets: [],
     };
   }
@@ -1989,7 +2031,7 @@ ipcMain.handle("jira:sync-worklogs", async (_, entries = []) => {
           entryId: entry.id,
           issueKey: entry.issueKey,
           success: false,
-          error: error.message,
+          error: getJiraRequestError(error),
         });
       }
     }
@@ -2003,7 +2045,7 @@ ipcMain.handle("jira:sync-worklogs", async (_, entries = []) => {
     return {
       ok: false,
       success: false,
-      error: error.message,
+      error: getJiraRequestError(error),
       results: [],
     };
   }

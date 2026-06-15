@@ -136,6 +136,8 @@ function Logger() {
   const [selectedTicket, setSelectedTicket] = useState("");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState("default");
+  const [notifications, setNotifications] = useState([]);
+  const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showImportGuide, setShowImportGuide] = useState(false);
   const [isMiniMode, setIsMiniMode] = useState(false);
@@ -204,6 +206,7 @@ function Logger() {
     hasJiraApiToken: false,
   });
   const [jiraFeedback, setJiraFeedback] = useState("");
+  const [jiraFeedbackTone, setJiraFeedbackTone] = useState("default");
   const [isJiraBusy, setIsJiraBusy] = useState(false);
   const [isJiraFetchingTickets, setIsJiraFetchingTickets] = useState(false);
   const [tempoStatus, setTempoStatus] = useState({
@@ -295,6 +298,8 @@ function Logger() {
   });
 
   const [manualTicket, setManualTicket] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [highlightedTicketIndex, setHighlightedTicketIndex] = useState(-1);
   const [manualEntryType, setManualEntryType] = useState("ticket");
   const [manualDate, setManualDate] = useState("");
   const [manualHours, setManualHours] = useState("");
@@ -319,6 +324,7 @@ function Logger() {
   const miniTicketRef = useRef(null);
   const dailyTargetNotificationRef = useRef("");
   const taskNotificationRef = useRef("");
+  const notifyRef = useRef(null);
 
   const [jiraTickets, setJiraTickets] = useState(() => {
     try {
@@ -328,6 +334,83 @@ function Logger() {
       return [];
     }
   });
+
+  function sanitizeNotificationText(value, maxLength = 240) {
+    const text = String(value ?? "")
+      .replace(/https?:\/\/[^\s)]+/gi, "[url removed]")
+      .replace(/\bwww\.[^\s)]+/gi, "[url removed]")
+      .replace(/\b[^\s@]+@[^\s@]+\.[^\s@]+\b/g, "[email removed]")
+      .replace(/\b(?:token|api key|apikey|pat|password|credential|secret)\s*[:=]\s*[^\s,;.]+/gi, "$1: [secret removed]")
+      .replace(/\b[A-Za-z0-9_./+=-]{32,}\b/g, "[secret removed]")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+  }
+
+  function addNotification({ type = "info", title = "", message = "", source = "app" } = {}) {
+    const allowedTypes = new Set(["error", "warning", "success", "info"]);
+    const allowedSources = new Set(["jira", "tempo", "app", "import", "update"]);
+    const notification = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: allowedTypes.has(type) ? type : "info",
+      title: sanitizeNotificationText(title || message || "Notification", 80),
+      message: sanitizeNotificationText(message || title || "Notification", 240),
+      timestamp: new Date().toISOString(),
+      source: allowedSources.has(source) ? source : "app",
+      read: false,
+    };
+
+    setNotifications((prev) => [notification, ...prev].slice(0, 50));
+    return notification;
+  }
+
+  function notify({ type = "info", title = "", message: notificationMessage = "", source = "app", toastMessage = "" } = {}) {
+    const toast = sanitizeNotificationText(toastMessage || notificationMessage || title, 160);
+    setMessageTone(type === "success" || type === "error" ? type : "default");
+    setMessage(toast);
+    addNotification({
+      type,
+      title,
+      message: notificationMessage || toast,
+      source,
+    });
+  }
+
+  notifyRef.current = notify;
+
+  function markNotificationRead(id) {
+    setNotifications((prev) =>
+      prev.map((notification) =>
+        notification.id === id ? { ...notification, read: true } : notification
+      )
+    );
+  }
+
+  function markAllNotificationsRead() {
+    setNotifications((prev) => prev.map((notification) => ({ ...notification, read: true })));
+  }
+
+  function clearNotifications() {
+    setNotifications([]);
+    setShowNotificationCenter(false);
+  }
+
+  function formatNotificationTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "";
+
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  const recentNotifications = notifications.slice(0, 20);
+  const unreadNotificationCount = notifications.filter((notification) => !notification.read).length;
+  const unreadErrorCount = notifications.filter((notification) => !notification.read && notification.type === "error").length;
+  const notificationBadgeCount = unreadErrorCount || unreadNotificationCount;
 
   function getTodayDate() {
     return getDateKeyFromDate(new Date());
@@ -358,6 +441,17 @@ function Logger() {
     const value = String(ticketName ?? "").trim();
     const match = value.match(/^([A-Z][A-Z0-9]+-\d+)(?:\s+-\s+.+)?$/i);
     return match ? match[1].toUpperCase() : value;
+  }
+
+  function getSafeJiraIssueKey(ticketName) {
+    const value = String(ticketName ?? "").trim();
+    const match = value.match(/\b([A-Z][A-Z0-9]+-\d+)\b/i);
+    return match ? match[1].toUpperCase() : "";
+  }
+
+  function getWorkingTicketStatus(ticketName) {
+    const issueKey = getSafeJiraIssueKey(ticketName);
+    return issueKey ? `Working on issue ${issueKey}` : String(ticketName ?? "").trim();
   }
 
   function getTicketMergeIdentity(entry) {
@@ -744,14 +838,11 @@ function Logger() {
       .map((item) => item.ticket);
   }
 
-  const filteredTickets = useMemo(() => {
-    return getMatchingJiraTickets(search);
-  }, [search, jiraTickets]);
-
-  const manualTicketSuggestions = useMemo(() => {
-    if (manualEntryType !== "ticket") return [];
-    return getMatchingJiraTickets(manualTicket).slice(0, 5);
-  }, [jiraTickets, manualEntryType, manualTicket]);
+  const filteredTickets = getMatchingJiraTickets(search);
+  const visibleSearchTickets = isSearchOpen && search.trim() ? filteredTickets.slice(0, 5) : [];
+  const manualTicketSuggestions = manualEntryType === "ticket"
+    ? getMatchingJiraTickets(manualTicket).slice(0, 5)
+    : [];
 
   const selectedFavoriteTicket = useMemo(() => {
     const value = search.trim().toLowerCase();
@@ -767,6 +858,7 @@ function Logger() {
   const activeEntry = useMemo(() => {
     return activeEntries.find((entry) => entry.id === activeEntryId) || null;
   }, [activeEntries, activeEntryId]);
+  const activeTicketStatusText = activeEntry ? getWorkingTicketStatus(activeEntry.ticketName) : "";
 
   const longRunningEntry = useMemo(() => {
     if (!activeEntry || activeEntry.status !== "running") return null;
@@ -1269,6 +1361,30 @@ function Logger() {
       body: activeReminderTask.title,
     });
   }, [activeReminderTask]);
+
+  useEffect(() => {
+    if (!window.loggerAPI?.onUpdateStatus) return;
+
+    return window.loggerAPI.onUpdateStatus((payload = {}) => {
+      if (payload.status === "update-available") {
+        notifyRef.current?.({
+          type: "info",
+          title: "Update available",
+          message: `Version ${payload.update?.version || "new"} is available.`,
+          source: "update",
+        });
+      }
+
+      if (payload.status === "error") {
+        notifyRef.current?.({
+          type: "error",
+          title: "Update failed",
+          message: payload.error || "Could not check for updates",
+          source: "update",
+        });
+      }
+    });
+  }, []);
 
   useEffect(() => {
     const runningEntry = activeEntries.find((entry) => entry.status === "running");
@@ -1788,7 +1904,51 @@ function Logger() {
     const fullName = `${ticket.id} - ${ticket.title}`;
     setSelectedTicket(fullName);
     setSearch(fullName);
-    setMessage(`Selected ${ticket.id}`);
+    setIsSearchOpen(false);
+    setHighlightedTicketIndex(-1);
+    setMessage(getWorkingTicketStatus(fullName));
+  }
+
+  function handleSearchChange(value) {
+    setSearch(value);
+    setSelectedTicket(value);
+    setIsSearchOpen(Boolean(value.trim()));
+    setHighlightedTicketIndex(-1);
+  }
+
+  function handleSearchKeyDown(event) {
+    if (event.key === "ArrowDown") {
+      if (!visibleSearchTickets.length) return;
+      event.preventDefault();
+      setIsSearchOpen(true);
+      setHighlightedTicketIndex((index) => (index + 1) % visibleSearchTickets.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      if (!visibleSearchTickets.length) return;
+      event.preventDefault();
+      setIsSearchOpen(true);
+      setHighlightedTicketIndex((index) =>
+        index <= 0 ? visibleSearchTickets.length - 1 : index - 1
+      );
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (isSearchOpen && highlightedTicketIndex >= 0 && visibleSearchTickets[highlightedTicketIndex]) {
+        handleSelectTicket(visibleSearchTickets[highlightedTicketIndex]);
+        return;
+      }
+
+      handleStartNewTicket();
+    }
+
+    if (event.key === "Escape") {
+      setIsSearchOpen(false);
+      setHighlightedTicketIndex(-1);
+    }
   }
 
   function startEntry(ticketName, entryMeta = {}) {
@@ -2564,8 +2724,39 @@ function Logger() {
     setThemeAccentColor(nextSettings.themeAccentColor);
     setAppLanguage(nextSettings.appLanguage || "no");
     setShowSettingsView(false);
-    setMessageTone("success");
-    setMessage(nextSettings.appLanguage === "en" ? "Settings saved" : "Innstillinger lagret");
+    notify({
+      type: "success",
+      title: "Settings saved",
+      message: nextSettings.appLanguage === "en" ? "Settings saved" : "Innstillinger lagret",
+      source: "app",
+    });
+  }
+
+  function setJiraErrorFeedback(message, title = "Jira failed") {
+    notify({
+      type: "error",
+      title,
+      message,
+      source: "jira",
+    });
+    setJiraFeedbackTone("error");
+    setJiraFeedback(message);
+  }
+
+  function setJiraDefaultFeedback(message) {
+    setJiraFeedbackTone("default");
+    setJiraFeedback(message);
+  }
+
+  function setJiraSuccessFeedback(message, title = "Jira updated") {
+    notify({
+      type: "success",
+      title,
+      message,
+      source: "jira",
+    });
+    setJiraFeedbackTone("success");
+    setJiraFeedback(message);
   }
 
   async function handleSaveJiraCredentials(credentials) {
@@ -2576,14 +2767,13 @@ function Logger() {
     }
 
     setIsJiraBusy(true);
-    setJiraFeedback("Saving Jira credentials...");
+    setJiraDefaultFeedback("Saving Jira credentials...");
 
     try {
       const result = await window.loggerAPI.jiraSaveCredentials(credentials);
 
       if (!result?.ok) {
-        setMessage(result?.error || "Could not save Jira credentials");
-        setJiraFeedback(result?.error || "Could not save Jira credentials");
+        setJiraErrorFeedback(result?.error || "Could not save Jira credentials", "Jira credentials failed");
         return false;
       }
 
@@ -2594,14 +2784,11 @@ function Logger() {
         jiraEmail: result.values?.jiraEmail || "",
         hasJiraApiToken: Boolean(result.values?.hasJiraApiToken),
       });
-      setMessageTone("success");
-      setMessage("Jira credentials saved");
-      setJiraFeedback("Jira credentials saved. You can test the connection now.");
+      setJiraSuccessFeedback("Jira credentials saved. You can test the connection now.", "Jira credentials saved");
       return true;
     } catch (error) {
       console.error("Could not save Jira credentials:", error);
-      setMessage("Could not save Jira credentials");
-      setJiraFeedback("Could not save Jira credentials");
+      setJiraErrorFeedback("Could not save Jira credentials", "Jira credentials failed");
       return false;
     } finally {
       setIsJiraBusy(false);
@@ -2616,24 +2803,20 @@ function Logger() {
     }
 
     setIsJiraBusy(true);
-    setJiraFeedback("Testing Jira connection...");
+    setJiraDefaultFeedback("Testing Jira connection...");
 
     try {
       const result = await window.loggerAPI.jiraTestConnection();
 
       if (!result?.success) {
-        setMessage(result?.error || "Jira connection failed");
-        setJiraFeedback(result?.error || "Jira connection failed");
+        setJiraErrorFeedback(result?.error || "Jira connection failed", "Jira connection failed");
         return;
       }
 
-      setMessageTone("success");
-      setMessage(`Connected to Jira as ${result.user?.displayName || result.user?.emailAddress || "user"}`);
-      setJiraFeedback(`Connected to Jira as ${result.user?.displayName || result.user?.emailAddress || "user"}.`);
+      setJiraSuccessFeedback(`Connected to Jira as ${result.user?.displayName || result.user?.emailAddress || "user"}.`, "Jira connected");
     } catch (error) {
       console.error("Could not test Jira connection:", error);
-      setMessage("Could not test Jira connection");
-      setJiraFeedback("Could not test Jira connection");
+      setJiraErrorFeedback("Could not test Jira connection", "Jira connection failed");
     } finally {
       setIsJiraBusy(false);
     }
@@ -2647,14 +2830,13 @@ function Logger() {
     }
 
     setIsJiraBusy(true);
-    setJiraFeedback("Clearing Jira credentials...");
+    setJiraDefaultFeedback("Clearing Jira credentials...");
 
     try {
       const result = await window.loggerAPI.jiraClearCredentials();
 
       if (!result?.ok) {
-        setMessage(result?.error || "Could not clear Jira credentials");
-        setJiraFeedback(result?.error || "Could not clear Jira credentials");
+        setJiraErrorFeedback(result?.error || "Could not clear Jira credentials", "Jira credentials failed");
         return;
       }
 
@@ -2665,13 +2847,10 @@ function Logger() {
         jiraEmail: "",
         hasJiraApiToken: false,
       });
-      setMessageTone("success");
-      setMessage("Jira credentials cleared");
-      setJiraFeedback("Jira credentials cleared.");
+      setJiraSuccessFeedback("Jira credentials cleared.", "Jira credentials cleared");
     } catch (error) {
       console.error("Could not clear Jira credentials:", error);
-      setMessage("Could not clear Jira credentials");
-      setJiraFeedback("Could not clear Jira credentials");
+      setJiraErrorFeedback("Could not clear Jira credentials", "Jira credentials failed");
     } finally {
       setIsJiraBusy(false);
     }
@@ -2679,19 +2858,18 @@ function Logger() {
 
   async function handleSyncJiraWorklogs() {
     if (!window.loggerAPI?.jiraSyncWorklogs) {
-      setMessage("Jira sync is not available");
-      setJiraFeedback("Jira sync is not available");
+      setJiraErrorFeedback("Jira sync is not available", "Jira sync failed");
       return;
     }
 
     if (!pendingJiraWorklogEntries.length) {
       setMessage("No Jira worklogs to sync");
-      setJiraFeedback("No Jira worklogs to sync.");
+      setJiraDefaultFeedback("No Jira worklogs to sync.");
       return;
     }
 
     setIsJiraBusy(true);
-    setJiraFeedback(`Syncing ${pendingJiraWorklogEntries.length} Jira worklogs...`);
+    setJiraDefaultFeedback(`Syncing ${pendingJiraWorklogEntries.length} Jira worklogs...`);
 
     try {
       const result = await window.loggerAPI.jiraSyncWorklogs(pendingJiraWorklogEntries);
@@ -2724,22 +2902,18 @@ function Logger() {
         : "";
 
       if (!result?.ok || failedCount) {
-        setMessage(
-          `Synced ${successfulResults.length} Jira worklogs${failedCount ? `, ${failedCount} failed` : ""}`
-        );
-        setJiraFeedback(
-          `Synced ${successfulResults.length} Jira worklogs${failedCount ? `, ${failedCount} failed` : ""}.${failureText}`
+        setJiraErrorFeedback(
+          result?.error ||
+          `Synced ${successfulResults.length} Jira worklogs${failedCount ? `, ${failedCount} failed` : ""}.${failureText}`,
+          "Jira sync failed"
         );
         return;
       }
 
-      setMessageTone("success");
-      setMessage(`Synced ${successfulResults.length} Jira worklogs`);
-      setJiraFeedback(`Synced ${successfulResults.length} Jira worklogs.`);
+      setJiraSuccessFeedback(`Synced ${successfulResults.length} Jira worklogs.`, "Jira sync completed");
     } catch (error) {
       console.error("Could not sync Jira worklogs:", error);
-      setMessage("Could not sync Jira worklogs");
-      setJiraFeedback("Could not sync Jira worklogs");
+      setJiraErrorFeedback("Could not sync Jira worklogs", "Jira sync failed");
     } finally {
       setIsJiraBusy(false);
     }
@@ -2795,7 +2969,12 @@ function Logger() {
       const result = await window.loggerAPI.tempoTestConnection();
 
       if (!result?.success) {
-        setMessage(result?.error || "Tempo connection failed");
+        notify({
+          type: "error",
+          title: "Tempo connection failed",
+          message: result?.error || "Tempo connection failed",
+          source: "tempo",
+        });
         setTempoFeedback(result?.error || "Tempo connection failed");
         return;
       }
@@ -2805,12 +2984,21 @@ function Logger() {
         result.info?.user?.accountId ||
         result.info?.account?.name ||
         "Tempo";
-      setMessageTone("success");
-      setMessage(`Connected to ${userText}`);
+      notify({
+        type: "success",
+        title: "Tempo connected",
+        message: `Connected to ${userText}.`,
+        source: "tempo",
+      });
       setTempoFeedback(`Connected to ${userText}.`);
     } catch (error) {
       console.error("Could not test Tempo connection:", error);
-      setMessage("Could not test Tempo connection");
+      notify({
+        type: "error",
+        title: "Tempo connection failed",
+        message: "Could not test Tempo connection",
+        source: "tempo",
+      });
       setTempoFeedback("Could not test Tempo connection");
     } finally {
       setIsTempoBusy(false);
@@ -2899,21 +3087,32 @@ function Logger() {
         : "";
 
       if (!result?.ok || failedCount) {
-        setMessage(
-          `Synced ${successfulResults.length} Tempo worklogs${failedCount ? `, ${failedCount} failed` : ""}`
-        );
-        setTempoFeedback(
-          `Synced ${successfulResults.length} Tempo worklogs${failedCount ? `, ${failedCount} failed` : ""}.${failureText}`
-        );
+        const syncMessage = `Synced ${successfulResults.length} Tempo worklogs${failedCount ? `, ${failedCount} failed` : ""}.${failureText}`;
+        notify({
+          type: "error",
+          title: "Tempo sync failed",
+          message: syncMessage,
+          source: "tempo",
+        });
+        setTempoFeedback(syncMessage);
         return;
       }
 
-      setMessageTone("success");
-      setMessage(`Synced ${successfulResults.length} Tempo worklogs`);
+      notify({
+        type: "success",
+        title: "Tempo sync completed",
+        message: `Synced ${successfulResults.length} Tempo worklogs.`,
+        source: "tempo",
+      });
       setTempoFeedback(`Synced ${successfulResults.length} Tempo worklogs.`);
     } catch (error) {
       console.error("Could not sync Tempo worklogs:", error);
-      setMessage("Could not sync Tempo worklogs");
+      notify({
+        type: "error",
+        title: "Tempo sync failed",
+        message: "Could not sync Tempo worklogs",
+        source: "tempo",
+      });
       setTempoFeedback("Could not sync Tempo worklogs");
     } finally {
       setIsTempoBusy(false);
@@ -2922,20 +3121,18 @@ function Logger() {
 
   async function handleLoadJiraProjects() {
     if (!window.loggerAPI?.jiraListProjects) {
-      setMessage("Jira project loading is not available");
-      setJiraFeedback("Jira project loading is not available");
+      setJiraErrorFeedback("Jira project loading is not available", "Jira projects failed");
       return;
     }
 
     setIsJiraFetchingTickets(true);
-    setJiraFeedback("Loading Jira projects...");
+    setJiraDefaultFeedback("Loading Jira projects...");
 
     try {
       const result = await window.loggerAPI.jiraListProjects();
 
       if (!result?.success) {
-        setMessage(result?.error || "Could not load Jira projects");
-        setJiraFeedback(result?.error || "Could not load Jira projects");
+        setJiraErrorFeedback(result?.error || "Could not load Jira projects", "Jira projects failed");
         return;
       }
 
@@ -2945,13 +3142,10 @@ function Logger() {
         const availableKeys = new Set(projects.map((project) => project.key));
         return prev.filter((key) => availableKeys.has(key));
       });
-      setMessageTone("success");
-      setMessage(`Loaded ${projects.length} Jira projects`);
-      setJiraFeedback(`Loaded ${projects.length} Jira projects. Select projects, then fetch tickets.`);
+      setJiraSuccessFeedback(`Loaded ${projects.length} Jira projects. Select projects, then fetch tickets.`, "Jira projects loaded");
     } catch (error) {
       console.error("Could not load Jira projects:", error);
-      setMessage("Could not load Jira projects");
-      setJiraFeedback("Could not load Jira projects");
+      setJiraErrorFeedback("Could not load Jira projects", "Jira projects failed");
     } finally {
       setIsJiraFetchingTickets(false);
     }
@@ -2970,13 +3164,12 @@ function Logger() {
 
   async function handleFetchJiraTickets() {
     if (!window.loggerAPI?.jiraFetchTickets) {
-      setMessage("Jira ticket fetching is not available");
-      setJiraFeedback("Jira ticket fetching is not available");
+      setJiraErrorFeedback("Jira ticket fetching is not available", "Jira ticket fetch failed");
       return;
     }
 
     setIsJiraFetchingTickets(true);
-    setJiraFeedback("Fetching Jira tickets...");
+    setJiraDefaultFeedback("Fetching Jira tickets...");
 
     try {
       const result = await window.loggerAPI.jiraFetchTickets({
@@ -2986,8 +3179,7 @@ function Logger() {
       });
 
       if (!result?.success) {
-        setMessage(result?.error || "Could not fetch Jira tickets");
-        setJiraFeedback(result?.error || "Could not fetch Jira tickets");
+        setJiraErrorFeedback(result?.error || "Could not fetch Jira tickets", "Jira ticket fetch failed");
         return;
       }
 
@@ -3036,15 +3228,13 @@ function Logger() {
         return [...fetchedFirst, ...remaining];
       });
 
-      setMessageTone("success");
-      setMessage(`Fetched ${fetchedTickets.length} Jira tickets`);
-      setJiraFeedback(
-        `Fetched ${fetchedTickets.length} Jira tickets from ${selectedProjectsText}${activeFilter ? ` with filter "${activeFilter}"` : ""}${addedCount ? `, added ${addedCount}` : ""}${updatedCount ? `, updated ${updatedCount}` : ""}${result.hasMore ? ", more available" : ""}.`
+      setJiraSuccessFeedback(
+        `Fetched ${fetchedTickets.length} Jira tickets from ${selectedProjectsText}${activeFilter ? ` with filter "${activeFilter}"` : ""}${addedCount ? `, added ${addedCount}` : ""}${updatedCount ? `, updated ${updatedCount}` : ""}${result.hasMore ? ", more available" : ""}.`,
+        "Tickets fetched"
       );
     } catch (error) {
       console.error("Could not fetch Jira tickets:", error);
-      setMessage("Could not fetch Jira tickets");
-      setJiraFeedback("Could not fetch Jira tickets");
+      setJiraErrorFeedback("Could not fetch Jira tickets", "Jira ticket fetch failed");
     } finally {
       setIsJiraFetchingTickets(false);
     }
@@ -3291,7 +3481,12 @@ function Logger() {
     setShowImportGuide(false);
 
     if (!window.loggerAPI?.importTicketsFromFile) {
-      setMessage("Import is not available");
+      notify({
+        type: "error",
+        title: "Import failed",
+        message: "Import is not available",
+        source: "import",
+      });
       return;
     }
 
@@ -3299,7 +3494,12 @@ function Logger() {
 
     if (!result?.ok) {
       if (!result?.canceled) {
-        setMessage("Could not import tickets");
+        notify({
+          type: "error",
+          title: "Import failed",
+          message: "Could not import tickets",
+          source: "import",
+        });
       }
       return;
     }
@@ -3308,7 +3508,12 @@ function Logger() {
     const importedEntries = Array.isArray(result.entries) ? result.entries : [];
 
     if (!importedTickets.length && !importedEntries.length) {
-      setMessage("No tickets found");
+      notify({
+        type: "warning",
+        title: "Import completed",
+        message: "No tickets found",
+        source: "import",
+      });
       return;
     }
 
@@ -3380,10 +3585,12 @@ function Logger() {
       });
     }
 
-    setMessageTone("success");
-    setMessage(
-      `Imported ${addedCount} tickets${updatedCount ? `, updated ${updatedCount}` : ""}${entryCount ? `, ${entryCount} entries` : ""}`
-    );
+    notify({
+      type: "success",
+      title: "Import completed",
+      message: `Imported ${addedCount} tickets${updatedCount ? `, updated ${updatedCount}` : ""}${entryCount ? `, ${entryCount} entries` : ""}`,
+      source: "import",
+    });
   }
 
   function openImportGuide() {
@@ -4691,6 +4898,68 @@ PROJ-456;2026-05-11;2t`}</pre>
     </section>
   );
 
+  const notificationCenter = (
+    <div className="notification-center-wrapper">
+      <button
+        type="button"
+        className={`notification-bell-btn ${showNotificationCenter ? "active" : ""} ${unreadErrorCount ? "has-errors" : ""}`}
+        onClick={() => setShowNotificationCenter((prev) => !prev)}
+        title="Notifications"
+        aria-label="Notifications"
+        aria-expanded={showNotificationCenter}
+      >
+        <Icon name="bell" size={15} />
+        {notificationBadgeCount > 0 && (
+          <span className="notification-badge">{notificationBadgeCount > 99 ? "99+" : notificationBadgeCount}</span>
+        )}
+      </button>
+
+      {showNotificationCenter && (
+        <div className="notification-panel" role="dialog" aria-label="Notifications">
+          <div className="notification-panel-header">
+            <div>
+              <strong>Notifications</strong>
+              <span>{unreadNotificationCount ? `${unreadNotificationCount} unread` : "All read"}</span>
+            </div>
+            <div className="notification-panel-actions">
+              <button type="button" onClick={markAllNotificationsRead} disabled={!unreadNotificationCount}>
+                Mark all read
+              </button>
+              <button type="button" onClick={clearNotifications} disabled={!notifications.length}>
+                Clear all
+              </button>
+            </div>
+          </div>
+
+          {recentNotifications.length ? (
+            <ul className="notification-list">
+              {recentNotifications.map((notification) => (
+                <li
+                  key={notification.id}
+                  className={`notification-item ${notification.type} ${notification.read ? "read" : "unread"}`}
+                >
+                  <button type="button" onClick={() => markNotificationRead(notification.id)}>
+                    <span className="notification-type-dot" aria-hidden="true" />
+                    <span className="notification-copy">
+                      <span className="notification-title-row">
+                        <strong>{notification.title}</strong>
+                        <small>{formatNotificationTimestamp(notification.timestamp)}</small>
+                      </span>
+                      <span className="notification-message">{notification.message}</span>
+                      <span className="notification-source">{notification.source}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="notification-empty">No notifications</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   if (isMiniMode) {
     return (
       <>
@@ -4852,6 +5121,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               size="normal"
             />
             <div style={{ width: '1px', height: '14px', background: 'rgba(255,255,255,0.12)', margin: '0 2px' }} />
+            {notificationCenter}
             <button
               type="button"
               className={`favorite-top-btn ${selectedFavoriteTicket?.favorite ? "active" : ""}`}
@@ -4997,6 +5267,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               accentColors={ACCENT_COLORS}
               jiraStatus={jiraStatus}
               jiraFeedback={jiraFeedback}
+              jiraFeedbackTone={jiraFeedbackTone}
               tempoStatus={tempoStatus}
               tempoFeedback={tempoFeedback}
               tempoSyncResults={tempoSyncResults}
@@ -5052,9 +5323,6 @@ PROJ-456;2026-05-11;2t`}</pre>
                   <div className={`countdown-timer ${countdownPulse ? "pulse" : ""}`}>
                     {formatTime(countdownSeconds)}
                   </div>
-                  <div className="countdown-subtext">
-                    of {formatTime(dailyTargetSeconds)}
-                  </div>
                 </div>
 
                 <div
@@ -5070,13 +5338,12 @@ PROJ-456;2026-05-11;2t`}</pre>
                     <Icon name="cloudUpload" size={16} />
                   </span>
                   <div className="sync-copy">
-                    <strong>
-                      Jira Sync
-                      {pendingJiraWorklogEntries.length > 0 && (
-                        <span className="sync-pending-pill">{pendingJiraWorklogEntries.length} pending</span>
-                      )}
-                    </strong>
-                    <span>Manual sync only</span>
+                    <strong>Jira Sync</strong>
+                    <span>
+                      {pendingJiraWorklogEntries.length > 0
+                        ? `${pendingJiraWorklogEntries.length} pending`
+                        : "Synced"}
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -5106,7 +5373,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                 <div className="active-ticket-body">
                   <div className="active-ticket-main">
                     <strong>{activeEntry?.ticketName || text.noActiveTicket}</strong>
-                    <span>{activeEntry ? text.running : text.startOrSelect}</span>
+                    <span>{activeEntry ? activeTicketStatusText : text.startOrSelect}</span>
                   </div>
 
                   {activeEntry && (
@@ -5165,25 +5432,32 @@ PROJ-456;2026-05-11;2t`}</pre>
                     ref={mainSearchRef}
                     type="text"
                     value={search}
-                    onChange={(e) => {
-                      setSearch(e.target.value);
-                      setSelectedTicket(e.target.value);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleStartNewTicket();
-                      }
-                    }}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onFocus={() => setIsSearchOpen(Boolean(search.trim()))}
+                    onKeyDown={handleSearchKeyDown}
                     placeholder="Søk eller skriv ticket (f.eks. KAN-9)"
+                    aria-activedescendant={
+                      highlightedTicketIndex >= 0 && visibleSearchTickets[highlightedTicketIndex]
+                        ? `ticket-search-${visibleSearchTickets[highlightedTicketIndex].id}`
+                        : undefined
+                    }
+                    aria-controls="ticket-search-results"
+                    aria-expanded={visibleSearchTickets.length > 0}
+                    role="combobox"
                   />
                   <span className="search-shortcut">/</span>
                 </div>
 
-                {search && (
-                  <ul className="search-results">
-                    {filteredTickets.slice(0, 5).map((ticket) => (
-                      <li key={ticket.id} className="search-item">
+                {visibleSearchTickets.length > 0 && (
+                  <ul className="search-results" id="ticket-search-results" role="listbox">
+                    {visibleSearchTickets.map((ticket, index) => (
+                      <li
+                        key={ticket.id}
+                        id={`ticket-search-${ticket.id}`}
+                        className={`search-item ${highlightedTicketIndex === index ? "highlighted" : ""}`}
+                        role="option"
+                        aria-selected={highlightedTicketIndex === index}
+                      >
                         <button type="button" onClick={() => handleSelectTicket(ticket)}>
                           {ticket.id} - {ticket.title}
                         </button>
@@ -5263,28 +5537,29 @@ PROJ-456;2026-05-11;2t`}</pre>
                 <span className="search-icon">
                   <Icon name="search" size={13} />
                 </span>
-                <input
-                  ref={mainSearchRef}
-                  type="text"
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setSelectedTicket(e.target.value);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleStartNewTicket();
-                    }
-                  }}
-                  placeholder="Type or search ticket"
-                />
-              </div>
+                  <input
+                    ref={mainSearchRef}
+                    type="text"
+                    value={search}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onFocus={() => setIsSearchOpen(Boolean(search.trim()))}
+                    onKeyDown={handleSearchKeyDown}
+                    placeholder="Type or search ticket"
+                    aria-controls="ticket-search-results"
+                    aria-expanded={visibleSearchTickets.length > 0}
+                    role="combobox"
+                  />
+                </div>
 
-              {search && (
-                <ul className="search-results">
-                  {filteredTickets.slice(0, 5).map((ticket) => (
-                    <li key={ticket.id} className="search-item">
+              {visibleSearchTickets.length > 0 && (
+                <ul className="search-results" id="ticket-search-results" role="listbox">
+                  {visibleSearchTickets.map((ticket, index) => (
+                    <li
+                      key={ticket.id}
+                      className={`search-item ${highlightedTicketIndex === index ? "highlighted" : ""}`}
+                      role="option"
+                      aria-selected={highlightedTicketIndex === index}
+                    >
                       <button type="button" onClick={() => handleSelectTicket(ticket)}>
                         {ticket.id} - {ticket.title}
                       </button>

@@ -4,6 +4,20 @@ A local React/Electron app for time tracking.
 
 Norwegian setup guide: [README.md](README.md)
 
+## Changes 2026-06-15
+
+- Active Jira tickets now show a status such as `Working on issue ADP-xxxxx` when a safe issue key can be parsed. If no Jira issue key is found, the regular ticket title is used.
+- Ticket search has improved keyboard UX: results only appear after typing, hide after a ticket is selected, and can be navigated with Arrow Up, Arrow Down, and Enter.
+- Jira test, fetch, and sync errors are shown as errors and use clearer messages for missing credentials, invalid URLs, `401/403`, and network failures.
+- Jira Cloud URLs can be entered as just a company name, for example `company`, and are normalized to `https://company.atlassian.net`. Full URLs still work, and Jira Server/Data Center URLs are not forced to Atlassian Cloud.
+- Jira API token/PAT handling is clearer in the UI: the token is never returned to the renderer, and the field only indicates that a token is saved.
+- Notification Center v1 has been added to the header. Toast messages still appear briefly, while Jira/Tempo/import/settings/update events are also kept in an in-memory history. Notifications are not written to disk and are sanitized for URLs, email addresses, and token-like text.
+- The top summary card now shows `Remaining today` and `Jira Sync` side by side at normal app width. The `of 07:30:00` text was removed.
+- English is now the default language for new users or users without a saved language preference. Existing saved language preferences are preserved.
+- Recent Activity, notification center labels, Jira sync labels, ticket search placeholder, and related empty states now follow the selected app language.
+- Known localized Jira error fragments are normalized for English UI so Jira sync notifications do not mix Norwegian and English text.
+- Jira worklog update after time changes is still not implemented. The existing Jira create/sync logic is unchanged.
+
 ## Requirements
 
 Install these tools before you start:

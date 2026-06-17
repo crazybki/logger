@@ -254,6 +254,8 @@ function Logger() {
   });
   const [jiraTicketQuery, setJiraTicketQuery] = useState("");
   const [miniTicket, setMiniTicket] = useState("");
+  const [isMiniTicketFocused, setIsMiniTicketFocused] = useState(false);
+  const [miniHighlightedTicketIndex, setMiniHighlightedTicketIndex] = useState(-1);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [storagePercent, setStoragePercent] = useState(100);
   const [countdownResetOffset, setCountdownResetOffset] = useState(() => {
@@ -328,6 +330,7 @@ function Logger() {
   const [manualTicket, setManualTicket] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [highlightedTicketIndex, setHighlightedTicketIndex] = useState(-1);
+  const [manualHighlightedTicketIndex, setManualHighlightedTicketIndex] = useState(-1);
   const [manualEntryType, setManualEntryType] = useState("ticket");
   const [manualDate, setManualDate] = useState("");
   const [manualHours, setManualHours] = useState("");
@@ -886,6 +889,7 @@ function Logger() {
 
   const filteredTickets = getMatchingJiraTickets(search);
   const visibleSearchTickets = isSearchOpen && search.trim() ? filteredTickets.slice(0, 5) : [];
+  const miniTicketSuggestions = miniTicket.trim() ? getMatchingJiraTickets(miniTicket).slice(0, 5) : [];
   const manualTicketSuggestions = manualEntryType === "ticket"
     ? getMatchingJiraTickets(manualTicket).slice(0, 5)
     : [];
@@ -1997,6 +2001,104 @@ function Logger() {
     }
   }
 
+  function selectMiniTicket(ticket) {
+    const fullName = `${ticket.id} - ${ticket.title}`;
+    setMiniTicket(fullName);
+    setSelectedTicket(fullName);
+    setIsMiniTicketFocused(false);
+    setMiniHighlightedTicketIndex(-1);
+  }
+
+  function handleMiniTicketChange(value) {
+    setMiniTicket(value);
+    setMiniHighlightedTicketIndex(-1);
+  }
+
+  function handleMiniTicketKeyDown(event) {
+    if (event.key === "ArrowDown") {
+      if (!miniTicketSuggestions.length) return;
+      event.preventDefault();
+      setIsMiniTicketFocused(true);
+      setMiniHighlightedTicketIndex((index) => (index + 1) % miniTicketSuggestions.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      if (!miniTicketSuggestions.length) return;
+      event.preventDefault();
+      setIsMiniTicketFocused(true);
+      setMiniHighlightedTicketIndex((index) =>
+        index <= 0 ? miniTicketSuggestions.length - 1 : index - 1
+      );
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+
+      if (miniHighlightedTicketIndex >= 0 && miniTicketSuggestions[miniHighlightedTicketIndex]) {
+        selectMiniTicket(miniTicketSuggestions[miniHighlightedTicketIndex]);
+        return;
+      }
+
+      handleStartMiniTicket();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      setIsMiniTicketFocused(false);
+      setMiniHighlightedTicketIndex(-1);
+    }
+  }
+
+  function selectManualTicket(ticket) {
+    const fullName = `${ticket.id} - ${ticket.title}`;
+    setManualTicket(fullName);
+    setSelectedTicket(fullName);
+    setManualFocused(null);
+    setManualHighlightedTicketIndex(-1);
+  }
+
+  function handleManualTicketChange(value) {
+    setManualTicket(value);
+    setManualHighlightedTicketIndex(-1);
+  }
+
+  function handleManualTicketKeyDown(event) {
+    if (manualEntryType !== "ticket") return;
+
+    if (event.key === "ArrowDown") {
+      if (!manualTicketSuggestions.length) return;
+      event.preventDefault();
+      setManualFocused("ticket");
+      setManualHighlightedTicketIndex((index) => (index + 1) % manualTicketSuggestions.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      if (!manualTicketSuggestions.length) return;
+      event.preventDefault();
+      setManualFocused("ticket");
+      setManualHighlightedTicketIndex((index) =>
+        index <= 0 ? manualTicketSuggestions.length - 1 : index - 1
+      );
+      return;
+    }
+
+    if (event.key === "Enter" && manualFocused === "ticket") {
+      if (manualHighlightedTicketIndex >= 0 && manualTicketSuggestions[manualHighlightedTicketIndex]) {
+        event.preventDefault();
+        selectManualTicket(manualTicketSuggestions[manualHighlightedTicketIndex]);
+      }
+      return;
+    }
+
+    if (event.key === "Escape") {
+      setManualFocused(null);
+      setManualHighlightedTicketIndex(-1);
+    }
+  }
+
   function startEntry(ticketName, entryMeta = {}) {
     const value = String(ticketName ?? "").trim();
     const timestamp = Date.now();
@@ -2057,6 +2159,8 @@ function Logger() {
       setSelectedTicket(existingPausedEntry.ticketName || value);
       setSearch("");
       setMiniTicket("");
+      setIsMiniTicketFocused(false);
+      setMiniHighlightedTicketIndex(-1);
       setMessage("Ticket resumed");
       return;
     }
@@ -2066,6 +2170,8 @@ function Logger() {
     setSelectedTicket(value);
     setSearch("");
     setMiniTicket("");
+    setIsMiniTicketFocused(false);
+    setMiniHighlightedTicketIndex(-1);
     setMessage("New ticket started");
   }
 
@@ -2730,6 +2836,7 @@ function Logger() {
     setManualHours("");
     setManualMinutes("");
     setManualFocused(null);
+    setManualHighlightedTicketIndex(-1);
     setShowManualModal(true);
   }
 
@@ -3362,6 +3469,7 @@ function Logger() {
     setManualHours("");
     setManualMinutes("");
     setManualFocused(null);
+    setManualHighlightedTicketIndex(-1);
     setShowManualModal(false);
     setMessageTone("success");
     setMessage(manualEntryType === "task" ? "Manual task saved" : "Manual entry saved");
@@ -3657,18 +3765,46 @@ function Logger() {
     setShowManualModal(false);
   }
 
-  const canSaveManual = Boolean(manualTicket.trim() && (manualHours || manualMinutes));
-  const manualTicketSuggestionList = manualTicketSuggestions.length > 0 && (
-    <ul className="manual-ticket-suggestions">
-      {manualTicketSuggestions.map((ticket) => (
-        <li key={ticket.id}>
+  const miniTicketSuggestionList = isMiniTicketFocused && miniTicketSuggestions.length > 0 && (
+    <ul className="mini-ticket-suggestions" id="mini-ticket-suggestions" role="listbox">
+      {miniTicketSuggestions.map((ticket, index) => (
+        <li
+          key={ticket.id}
+          id={`mini-ticket-suggestion-${ticket.id}`}
+          className={miniHighlightedTicketIndex === index ? "highlighted" : ""}
+          role="option"
+          aria-selected={miniHighlightedTicketIndex === index}
+        >
           <button
             type="button"
             onMouseDown={(event) => {
               event.preventDefault();
-              setManualTicket(`${ticket.id} - ${ticket.title}`);
-              setSelectedTicket(`${ticket.id} - ${ticket.title}`);
-              setManualFocused(null);
+              selectMiniTicket(ticket);
+            }}
+          >
+            <strong>{ticket.id}</strong>
+            {ticket.title && <span>{ticket.title}</span>}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+  const canSaveManual = Boolean(manualTicket.trim() && (manualHours || manualMinutes));
+  const manualTicketSuggestionList = manualTicketSuggestions.length > 0 && (
+    <ul className="manual-ticket-suggestions" id="manual-ticket-suggestions" role="listbox">
+      {manualTicketSuggestions.map((ticket, index) => (
+        <li
+          key={ticket.id}
+          id={`manual-ticket-suggestion-${ticket.id}`}
+          className={manualHighlightedTicketIndex === index ? "highlighted" : ""}
+          role="option"
+          aria-selected={manualHighlightedTicketIndex === index}
+        >
+          <button
+            type="button"
+            onMouseDown={(event) => {
+              event.preventDefault();
+              selectManualTicket(ticket);
             }}
           >
             <strong>{ticket.id}</strong>
@@ -4568,11 +4704,24 @@ PROJ-456;2026-05-11;2t`}</pre>
                   ref={manualTicketRef}
                   type="text"
                   value={manualTicket}
-                  onChange={(e) => setManualTicket(e.target.value)}
+                  onChange={(e) => handleManualTicketChange(e.target.value)}
+                  onKeyDown={handleManualTicketKeyDown}
                   onFocus={() => setManualFocused("ticket")}
-                  onBlur={() => setManualFocused(null)}
+                  onBlur={() => {
+                    setManualFocused(null);
+                    setManualHighlightedTicketIndex(-1);
+                  }}
                   className={manualFocused === "ticket" ? "focused" : ""}
                   placeholder={manualEntryType === "task" ? "Task" : "Ticket"}
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls="manual-ticket-suggestions"
+                  aria-expanded={manualFocused === "ticket" && manualTicketSuggestions.length > 0}
+                  aria-activedescendant={
+                    manualHighlightedTicketIndex >= 0 && manualTicketSuggestions[manualHighlightedTicketIndex]
+                      ? `manual-ticket-suggestion-${manualTicketSuggestions[manualHighlightedTicketIndex].id}`
+                      : undefined
+                  }
                 />
 
                 <input
@@ -4629,11 +4778,24 @@ PROJ-456;2026-05-11;2t`}</pre>
                 ref={manualTicketRef}
                 type="text"
                 value={manualTicket}
-                onChange={(e) => setManualTicket(e.target.value)}
+                onChange={(e) => handleManualTicketChange(e.target.value)}
+                onKeyDown={handleManualTicketKeyDown}
                 onFocus={() => setManualFocused("ticket")}
-                onBlur={() => setManualFocused(null)}
+                onBlur={() => {
+                  setManualFocused(null);
+                  setManualHighlightedTicketIndex(-1);
+                }}
                 className={manualFocused === "ticket" ? "focused" : ""}
                 placeholder={manualEntryType === "task" ? "e.g. Write meeting notes" : "e.g. PROJ-1234"}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="manual-ticket-suggestions"
+                aria-expanded={manualFocused === "ticket" && manualTicketSuggestions.length > 0}
+                aria-activedescendant={
+                  manualHighlightedTicketIndex >= 0 && manualTicketSuggestions[manualHighlightedTicketIndex]
+                    ? `manual-ticket-suggestion-${manualTicketSuggestions[manualHighlightedTicketIndex].id}`
+                    : undefined
+                }
               />
               {manualFocused === "ticket" && manualTicketSuggestionList}
 
@@ -5067,31 +5229,43 @@ PROJ-456;2026-05-11;2t`}</pre>
                   </div>
                 </div>
 
-                <div className="mini-start-row">
-                  <input
-                    ref={miniTicketRef}
-                    type="text"
-                    value={miniTicket}
-                    onChange={(e) => setMiniTicket(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleStartMiniTicket();
+                <div className="mini-ticket-combobox">
+                  <div className="mini-start-row">
+                    <input
+                      ref={miniTicketRef}
+                      type="text"
+                      value={miniTicket}
+                      onChange={(e) => handleMiniTicketChange(e.target.value)}
+                      onKeyDown={handleMiniTicketKeyDown}
+                      onFocus={() => setIsMiniTicketFocused(true)}
+                      onBlur={() => {
+                        setIsMiniTicketFocused(false);
+                        setMiniHighlightedTicketIndex(-1);
+                      }}
+                      placeholder="New ticket..."
+                      className="mini-ticket-input"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-controls="mini-ticket-suggestions"
+                      aria-expanded={isMiniTicketFocused && miniTicketSuggestions.length > 0}
+                      aria-activedescendant={
+                        miniHighlightedTicketIndex >= 0 && miniTicketSuggestions[miniHighlightedTicketIndex]
+                          ? `mini-ticket-suggestion-${miniTicketSuggestions[miniHighlightedTicketIndex].id}`
+                          : undefined
                       }
-                    }}
-                    placeholder="New ticket..."
-                    className="mini-ticket-input"
-                  />
+                    />
 
-                  <button
-                    type="button"
-                    className={`mini-primary-start ${miniIsRunning ? "running" : miniHasTicket ? "ready" : ""}`}
-                    onClick={handleToggleMiniTimer}
-                    disabled={!miniIsRunning && !miniHasTicket}
-                  >
-                    <Icon name={miniIsRunning ? "pause" : "play"} size={12} />
-                    <span>{miniIsRunning ? "Stop" : "Start"}</span>
-                  </button>
+                    <button
+                      type="button"
+                      className={`mini-primary-start ${miniIsRunning ? "running" : miniHasTicket ? "ready" : ""}`}
+                      onClick={handleToggleMiniTimer}
+                      disabled={!miniIsRunning && !miniHasTicket}
+                    >
+                      <Icon name={miniIsRunning ? "pause" : "play"} size={12} />
+                      <span>{miniIsRunning ? "Stop" : "Start"}</span>
+                    </button>
+                  </div>
+                  {miniTicketSuggestionList}
                 </div>
 
                 <div className="mini-actions">

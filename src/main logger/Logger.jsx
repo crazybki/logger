@@ -89,6 +89,7 @@ const UI_TEXT = {
     synced: "Synket",
     pending: "venter",
     sync: "Synk",
+    syncTicket: "Synk ticket",
     ticketSearchPlaceholder: "Søk eller skriv ticket (f.eks. KAN-9)",
     recentActivity: "Siste aktivitet",
     viewAll: "Vis alle",
@@ -152,6 +153,7 @@ const UI_TEXT = {
     synced: "Synced",
     pending: "pending",
     sync: "Sync",
+    syncTicket: "Sync ticket",
     ticketSearchPlaceholder: "Search or type ticket (e.g. KAN-9)",
     recentActivity: "Recent Activity",
     viewAll: "View all",
@@ -659,6 +661,10 @@ function Logger() {
         };
       });
   }, [activeEntries, jiraTickets]);
+
+  const pendingJiraWorklogEntryById = useMemo(() => {
+    return new Map(pendingJiraWorklogEntries.map((entry) => [entry.id, entry]));
+  }, [pendingJiraWorklogEntries]);
 
   const pendingTempoWorklogEntries = useMemo(() => {
     const ticketById = new Map(
@@ -3010,23 +3016,30 @@ function Logger() {
     }
   }
 
-  async function handleSyncJiraWorklogs() {
+  async function handleSyncJiraWorklogs(targetEntries) {
+    const entriesToSync = Array.isArray(targetEntries) ? targetEntries : pendingJiraWorklogEntries;
+
     if (!window.loggerAPI?.jiraSyncWorklogs) {
       setJiraErrorFeedback("Jira sync is not available", "Jira sync failed");
       return;
     }
 
-    if (!pendingJiraWorklogEntries.length) {
+    if (!entriesToSync.length) {
       setMessage("No Jira worklogs to sync");
       setJiraDefaultFeedback("No Jira worklogs to sync.");
       return;
     }
 
+    const isSingleEntrySync = entriesToSync.length === 1;
     setIsJiraBusy(true);
-    setJiraDefaultFeedback(`Syncing ${pendingJiraWorklogEntries.length} Jira worklogs...`);
+    setJiraDefaultFeedback(
+      isSingleEntrySync
+        ? `Syncing ${entriesToSync[0].jiraIssueKey || entriesToSync[0].ticketName} to Jira...`
+        : `Syncing ${entriesToSync.length} Jira worklogs...`
+    );
 
     try {
-      const result = await window.loggerAPI.jiraSyncWorklogs(pendingJiraWorklogEntries);
+      const result = await window.loggerAPI.jiraSyncWorklogs(entriesToSync);
       const results = Array.isArray(result?.results) ? result.results : [];
       const successfulResults = results.filter((item) => item.success && item.worklog?.id);
       const syncedAt = new Date().toISOString();
@@ -3064,7 +3077,12 @@ function Logger() {
         return;
       }
 
-      setJiraSuccessFeedback(`Synced ${successfulResults.length} Jira worklogs.`, "Jira sync completed");
+      setJiraSuccessFeedback(
+        isSingleEntrySync
+          ? `Synced ${entriesToSync[0].jiraIssueKey || entriesToSync[0].ticketName} to Jira.`
+          : `Synced ${successfulResults.length} Jira worklogs.`,
+        "Jira sync completed"
+      );
     } catch (error) {
       console.error("Could not sync Jira worklogs:", error);
       setJiraErrorFeedback("Could not sync Jira worklogs", "Jira sync failed");
@@ -3502,8 +3520,10 @@ function Logger() {
     }
 
     const timestamp = Date.now();
-    setEntries((prev) =>
-      prev.map((entry) => {
+    setEntries((prev) => {
+      let syncedTimeAdjustment = null;
+
+      const updatedEntries = prev.map((entry) => {
         if (entry.id !== editingEntryId) {
           return entry.status === "running" && !entry.deletedAt
             ? applyElapsedTime(entry, timestamp)
@@ -3511,6 +3531,25 @@ function Logger() {
         }
 
         const syncedEntry = applyElapsedTime(entry, timestamp);
+        const wasSyncedExternally = Boolean(syncedEntry.jiraWorklogId || syncedEntry.tempoWorklogId);
+        const timeDeltaSeconds = totalSeconds - Number(syncedEntry.seconds || 0);
+
+        if (wasSyncedExternally && timeDeltaSeconds > 0) {
+          syncedTimeAdjustment = {
+            id: timestamp,
+            ticketName: editTicket.trim(),
+            seconds: timeDeltaSeconds,
+            status: "done",
+            createdAt: editDate,
+            dateKey: editDate,
+            source: "manual",
+          };
+
+          return syncedEntry.status === "running"
+            ? { ...syncedEntry, status: "paused", lastTickAt: undefined }
+            : syncedEntry;
+        }
+
         return {
           ...syncedEntry,
           ticketName: editTicket.trim(),
@@ -3520,8 +3559,12 @@ function Logger() {
           status: syncedEntry.status === "running" ? "paused" : syncedEntry.status,
           lastTickAt: undefined,
         };
-      })
-    );
+      });
+
+      return syncedTimeAdjustment
+        ? addOrMergeCompletedTicketEntry(updatedEntries, syncedTimeAdjustment)
+        : updatedEntries;
+    });
 
     if (editingEntryId === activeEntryId) {
       setActiveEntryId(null);
@@ -5926,6 +5969,18 @@ PROJ-456;2026-05-11;2t`}</pre>
                                   >
                                     <ClipboardCheck size={13} strokeWidth={2} />
                                   </button>
+
+                                  {pendingJiraWorklogEntryById.has(entry.id) && (
+                                    <button
+                                      type="button"
+                                      className="entry-action-btn jira-sync"
+                                      onClick={() => handleSyncJiraWorklogs([pendingJiraWorklogEntryById.get(entry.id)])}
+                                      disabled={!hasSavedJiraCredentials || isJiraBusy}
+                                      title={text.syncTicket}
+                                    >
+                                      <Icon name="cloudUpload" size={13} />
+                                    </button>
+                                  )}
 
                                   {entry.status !== "done" && entry.id !== activeEntryId && (
                                     <button

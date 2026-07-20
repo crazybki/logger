@@ -3801,6 +3801,15 @@ body {
     color: #43b583;
 }
 
+.entry-action-btn.jira-sync {
+    color: #8b5cff;
+}
+
+.entry-action-btn.jira-sync:disabled {
+    cursor: not-allowed;
+    opacity: 0.28;
+}
+
 .entry-action-btn.handover.has-notes {
     color: #7ee28d;
     opacity: 0.9;

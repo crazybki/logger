@@ -2293,11 +2293,37 @@ body {
     padding-top: 12px;
 }
 
+.settings-app-meta {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    margin-right: auto;
+}
+
 .settings-version {
     color: var(--theme-muted);
     font-size: 11px;
     font-weight: 800;
-    margin-right: auto;
+}
+
+.settings-restart {
+    align-items: center;
+    background: var(--theme-purple-soft);
+    border: 1px solid var(--theme-border);
+    border-radius: 6px;
+    color: var(--theme-text);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 11px;
+    font-weight: 900;
+    gap: 6px;
+    height: 30px;
+    padding: 0 10px;
+}
+
+.settings-restart:hover {
+    border-color: var(--theme-border-strong);
+    color: #fff;
 }
 
 .settings-save {

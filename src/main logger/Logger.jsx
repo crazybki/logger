@@ -2961,6 +2961,23 @@ function Logger() {
     });
   }
 
+  function handleRestartApp() {
+    if (!window.loggerAPI?.restartApp) {
+      notify({
+        type: "error",
+        title: "Restart unavailable",
+        message: "App restart is only available in the desktop app.",
+        source: "settings",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(appLanguage === "en" ? "Restart Time Logger now?" : "Restarte Time Logger nå?");
+    if (!confirmed) return;
+
+    window.loggerAPI.restartApp();
+  }
+
   function setJiraErrorFeedback(message, title = "Jira failed") {
     const displayMessage = getDisplayErrorMessage(message);
     notify({
@@ -5629,6 +5646,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               onChangeJiraTicketQuery={setJiraTicketQuery}
               onFetchJiraTickets={handleFetchJiraTickets}
               onOpenBugReport={handleOpenBugReport}
+              onRestartApp={handleRestartApp}
             />
           ) : (
             <div className="home-view">

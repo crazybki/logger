@@ -48,6 +48,7 @@ export function SettingsView({
   onChangeJiraTicketQuery,
   onFetchJiraTickets,
   onOpenBugReport,
+  onRestartApp,
 }) {
   const text = appLanguage === "en"
     ? {
@@ -127,6 +128,7 @@ export function SettingsView({
         selectedProjects: "Selected projects",
         support: "Support",
         version: "Version",
+        restartApp: "Restart app",
         bugReport: "Bug report",
         bugReportHelp: "Open the GitHub bug report template in your browser.",
         openBugReport: "Report bug",
@@ -208,6 +210,7 @@ export function SettingsView({
         selectedProjects: "Valgte prosjekter",
         support: "Support",
         version: "Versjon",
+        restartApp: "Restart app",
         bugReport: "Bugrapport",
         bugReportHelp: "Åpne GitHub-malen for bugrapport i nettleseren.",
         openBugReport: "Rapporter bug",
@@ -793,11 +796,24 @@ export function SettingsView({
         </div>
 
         <div className="settings-actions">
-          {appVersion && (
-            <span className="settings-version">
-              {text.version} {appVersion}
-            </span>
-          )}
+          <div className="settings-app-meta">
+            {appVersion && (
+              <span className="settings-version">
+                {text.version} {appVersion}
+              </span>
+            )}
+            {onRestartApp && (
+              <button
+                type="button"
+                className="settings-restart"
+                onClick={onRestartApp}
+                title={text.restartApp}
+              >
+                <Icon name="resetTimer" size={12} />
+                {text.restartApp}
+              </button>
+            )}
+          </div>
           <button type="button" className="settings-cancel" onClick={onClose}>
             {text.cancel}
           </button>

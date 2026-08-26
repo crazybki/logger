@@ -1335,6 +1335,13 @@ ipcMain.on("window:close", () => {
 
 ipcMain.handle("app:get-version", () => app.getVersion());
 
+ipcMain.handle("app:restart", () => {
+  isQuitting = true;
+  app.relaunch();
+  app.exit(0);
+  return { ok: true };
+});
+
 ipcMain.handle("updates:check", () => checkForUpdates());
 
 ipcMain.handle("updates:quit-and-install", () => {

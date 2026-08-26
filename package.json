@@ -42,7 +42,8 @@
     "publish": {
       "provider": "github",
       "owner": "crazybki",
-      "repo": "logger"
+      "repo": "logger",
+      "releaseType": "release"
     },
     "afterPack": "scripts/afterPack.cjs",
     "files": [

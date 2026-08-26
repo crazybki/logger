@@ -31,7 +31,29 @@ jobs:
       - name: Test
         run: npm run test
 
-      - name: Build and publish
-        run: npm run dist -- --publish always
+      - name: Build installer
+        run: npm run dist -- --publish never
+
+      - name: Normalize release asset names
+        shell: pwsh
+        run: |
+          $version = (node -p "require('./package.json').version").Trim()
+          Copy-Item -LiteralPath "release\Time Logger Setup $version.exe" -Destination "release\Time-Logger-Setup-$version.exe" -Force
+          Copy-Item -LiteralPath "release\Time Logger Setup $version.exe.blockmap" -Destination "release\Time-Logger-Setup-$version.exe.blockmap" -Force
+
+      - name: Publish release assets
+        shell: pwsh
+        run: |
+          $version = (node -p "require('./package.json').version").Trim()
+          gh release create "v$version" `
+            --title "$version" `
+            --notes "Time Logger $version" `
+            --target "$env:GITHUB_SHA" `
+            --latest
+          gh release upload "v$version" `
+            "release\Time-Logger-Setup-$version.exe" `
+            "release\Time-Logger-Setup-$version.exe.blockmap" `
+            "release\latest.yml" `
+            --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

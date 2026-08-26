@@ -15,6 +15,7 @@ const makePayloadListener = (channel) => (callback) => {
 contextBridge.exposeInMainWorld("loggerAPI", {
   exportEntriesToCSV: (entries) => ipcRenderer.invoke("log:export-entries", entries),
   importTicketsFromFile: () => ipcRenderer.invoke("tickets:import-file"),
+  getAppVersion: () => ipcRenderer.invoke("app:get-version"),
   showNotification: (options) => ipcRenderer.invoke("notification:show", options),
   openBugReportIssue: () => ipcRenderer.invoke("bug-report:open-issue-template"),
   secureStoreGetAll: (keys) => ipcRenderer.invoke("secure-store:get-all", keys),

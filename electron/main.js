@@ -1333,6 +1333,8 @@ ipcMain.on("window:close", () => {
   mainWindow?.close();
 });
 
+ipcMain.handle("app:get-version", () => app.getVersion());
+
 ipcMain.handle("updates:check", () => checkForUpdates());
 
 ipcMain.handle("updates:quit-and-install", () => {

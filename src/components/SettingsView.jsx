@@ -17,6 +17,7 @@ export function SettingsView({
   themePreset,
   themeAccentColor,
   appLanguage = "en",
+  appVersion = "",
   accentColors,
   jiraStatus = {},
   jiraFeedback = "",
@@ -125,6 +126,7 @@ export function SettingsView({
         noProjectsLoaded: "No Jira projects loaded yet.",
         selectedProjects: "Selected projects",
         support: "Support",
+        version: "Version",
         bugReport: "Bug report",
         bugReportHelp: "Open the GitHub bug report template in your browser.",
         openBugReport: "Report bug",
@@ -205,6 +207,7 @@ export function SettingsView({
         noProjectsLoaded: "Ingen Jira-prosjekter hentet ennå.",
         selectedProjects: "Valgte prosjekter",
         support: "Support",
+        version: "Versjon",
         bugReport: "Bugrapport",
         bugReportHelp: "Åpne GitHub-malen for bugrapport i nettleseren.",
         openBugReport: "Rapporter bug",
@@ -790,6 +793,11 @@ export function SettingsView({
         </div>
 
         <div className="settings-actions">
+          {appVersion && (
+            <span className="settings-version">
+              {text.version} {appVersion}
+            </span>
+          )}
           <button type="button" className="settings-cancel" onClick={onClose}>
             {text.cancel}
           </button>

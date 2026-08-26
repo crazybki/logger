@@ -234,6 +234,7 @@ function Logger() {
       return "en";
     }
   });
+  const [appVersion, setAppVersion] = useState("");
   const [jiraStatus, setJiraStatus] = useState({
     jiraMode: "cloud",
     jiraAuthMethod: "bearer",
@@ -1178,6 +1179,27 @@ function Logger() {
   useEffect(() => {
     localStorage.setItem("appLanguage", appLanguage);
   }, [appLanguage]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAppVersion() {
+      if (!window.loggerAPI?.getAppVersion) return;
+
+      try {
+        const version = await window.loggerAPI.getAppVersion();
+        if (!cancelled) setAppVersion(String(version || ""));
+      } catch (error) {
+        console.error("Could not load app version:", error);
+      }
+    }
+
+    loadAppVersion();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("selectedJiraProjectKeys", JSON.stringify(selectedJiraProjectKeys));
@@ -5576,6 +5598,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               themePreset={themePreset}
               themeAccentColor={themeAccentColor}
               appLanguage={appLanguage}
+              appVersion={appVersion}
               accentColors={ACCENT_COLORS}
               jiraStatus={jiraStatus}
               jiraFeedback={jiraFeedback}

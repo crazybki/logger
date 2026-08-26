@@ -24,6 +24,7 @@ let secureStoreWriteQueue = Promise.resolve();
 let updateCheckPromise = null;
 let isUpdateDownloaded = false;
 let hasStartedUpdateCheck = false;
+let lastUpdateErrorMessage = "";
 
 const NORMAL_SIZE = { width: 400, height: 700 };
 const MINI_SIZE = { width: 420, height: 305 };
@@ -119,6 +120,27 @@ function sendUpdateStatus(status, payload = {}) {
   });
 }
 
+function getUpdateErrorMessage(error) {
+  const message = error?.message || "Update failed";
+
+  if (
+    message.includes("Cannot find channel \"latest.yml\"") ||
+    (message.includes("HttpError") && message.includes("404"))
+  ) {
+    return "Update feed was not found. Install the latest version once to switch to GitHub updates.";
+  }
+
+  return message;
+}
+
+function sendUpdateError(error) {
+  const message = truncateText(getUpdateErrorMessage(error), MAX_NOTIFICATION_LENGTH);
+  if (message === lastUpdateErrorMessage) return;
+
+  lastUpdateErrorMessage = message;
+  sendUpdateStatus("error", { error: message });
+}
+
 async function promptForDownloadedUpdate(info = {}) {
   if (!mainWindow || !isUpdateDownloaded) return;
 
@@ -141,6 +163,7 @@ async function promptForDownloadedUpdate(info = {}) {
 
 function registerAutoUpdaterEvents() {
   autoUpdater.on("checking-for-update", () => {
+    lastUpdateErrorMessage = "";
     sendUpdateStatus("checking");
   });
 
@@ -172,9 +195,7 @@ function registerAutoUpdaterEvents() {
   });
 
   autoUpdater.on("error", (error) => {
-    sendUpdateStatus("error", {
-      error: truncateText(error?.message || "Update failed", MAX_NOTIFICATION_LENGTH),
-    });
+    sendUpdateError(error);
   });
 }
 
@@ -194,13 +215,11 @@ async function checkForUpdates() {
   updateCheckPromise = autoUpdater.checkForUpdates()
     .then(() => ({ ok: true }))
     .catch((error) => {
-      sendUpdateStatus("error", {
-        error: truncateText(error?.message || "Update failed", MAX_NOTIFICATION_LENGTH),
-      });
+      sendUpdateError(error);
 
       return {
         ok: false,
-        error: truncateText(error?.message || "Update failed", MAX_NOTIFICATION_LENGTH),
+        error: truncateText(getUpdateErrorMessage(error), MAX_NOTIFICATION_LENGTH),
       };
     })
     .finally(() => {

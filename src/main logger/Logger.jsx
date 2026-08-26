@@ -94,6 +94,9 @@ const UI_TEXT = {
     recentActivity: "Siste aktivitet",
     viewAll: "Vis alle",
     noTimeLoggedYet: "Ingen tid logget ennå",
+    deleteDay: "Slett dag",
+    confirmDeleteDay: "Flytte alle entries for denne dagen til papirkurven?",
+    dayEntriesDeleted: "Dagens entries flyttet til papirkurv",
   },
   en: {
     reminders: "Reminders",
@@ -158,6 +161,9 @@ const UI_TEXT = {
     recentActivity: "Recent Activity",
     viewAll: "View all",
     noTimeLoggedYet: "No time logged yet",
+    deleteDay: "Delete day",
+    confirmDeleteDay: "Move all entries for this day to trash?",
+    dayEntriesDeleted: "Day entries moved to trash",
   },
 };
 
@@ -1431,6 +1437,15 @@ function Logger() {
         });
       }
 
+      if (payload.status === "update-downloaded") {
+        notifyRef.current?.({
+          type: "success",
+          title: "Update ready",
+          message: `Version ${payload.update?.version || "new"} is ready. Restart to install.`,
+          source: "update",
+        });
+      }
+
       if (payload.status === "error") {
         notifyRef.current?.({
           type: "error",
@@ -2314,6 +2329,39 @@ function Logger() {
       setMessageTone("success");
       setMessage("Entry deleted");
     }, 240);
+  }
+
+  function handleDeleteDayEntries(dateKey) {
+    const dayEntries = activeEntries.filter((entry) => getDateKey(entry) === dateKey);
+    if (!dayEntries.length) return;
+
+    const displayDate = formatDateShort(dateKey);
+    const confirmed = window.confirm(`${text.confirmDeleteDay}\n\n${displayDate} - ${dayEntries.length} entries`);
+    if (!confirmed) return;
+
+    const timestamp = Date.now();
+    const deletedAt = new Date().toISOString();
+    const dayEntryIds = new Set(dayEntries.map((entry) => entry.id));
+
+    if (dayEntries.some((entry) => entry.id === activeEntryId)) {
+      setActiveEntryId(null);
+    }
+
+    setEntries((prev) =>
+      prev.map((entry) =>
+        dayEntryIds.has(entry.id)
+          ? {
+            ...applyElapsedTime(entry, timestamp),
+            status: entry.status === "running" ? "paused" : entry.status,
+            lastTickAt: undefined,
+            deletedAt,
+          }
+          : entry
+      )
+    );
+    setCountdownPulse(true);
+    setMessageTone("success");
+    setMessage(`${text.dayEntriesDeleted}: ${displayDate}`);
   }
 
   function openTodoFromTicket(entry) {
@@ -5908,8 +5956,19 @@ PROJ-456;2026-05-11;2t`}</pre>
                     className="entry-group"
                   >
                     <div className="entry-group-header">
-                      <span className="entry-group-date">{displayDate}</span>
-                      <span className="entry-group-total-inline">Total {formatTimeShort(dayTotal)}</span>
+                      <div className="entry-group-summary">
+                        <span className="entry-group-date">{displayDate}</span>
+                        <span className="entry-group-total-inline">Total {formatTimeShort(dayTotal)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="entry-group-delete"
+                        onClick={() => handleDeleteDayEntries(date)}
+                        title={text.deleteDay}
+                        aria-label={`${text.deleteDay}: ${displayDate}`}
+                      >
+                        <Trash2 size={12} strokeWidth={2} />
+                      </button>
                     </div>
 
                     <ul className="entry-list">

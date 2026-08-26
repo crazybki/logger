@@ -119,6 +119,26 @@ function sendUpdateStatus(status, payload = {}) {
   });
 }
 
+async function promptForDownloadedUpdate(info = {}) {
+  if (!mainWindow || !isUpdateDownloaded) return;
+
+  const version = truncateText(info.version || "new", 80);
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: "info",
+    buttons: ["Restart now", "Later"],
+    defaultId: 0,
+    cancelId: 1,
+    title: "Update ready",
+    message: `Version ${version} is ready to install.`,
+    detail: "Restart Time Logger to finish the update. Your local data is kept.",
+  });
+
+  if (result.response !== 0 || !isUpdateDownloaded) return;
+
+  isQuitting = true;
+  autoUpdater.quitAndInstall(false, true);
+}
+
 function registerAutoUpdaterEvents() {
   autoUpdater.on("checking-for-update", () => {
     sendUpdateStatus("checking");
@@ -148,6 +168,7 @@ function registerAutoUpdaterEvents() {
     sendUpdateStatus("update-downloaded", {
       update: sanitizeUpdateInfo(info),
     });
+    promptForDownloadedUpdate(info);
   });
 
   autoUpdater.on("error", (error) => {

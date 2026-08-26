@@ -1,7 +1,7 @@
 {
   "name": "logger",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite --port 5173 --strictPort",
@@ -39,12 +39,11 @@
     "directories": {
       "output": "release"
     },
-    "publish": [
-      {
-        "provider": "generic",
-        "url": "https://crazybki.github.io/react-logger-releases/windows/"
-      }
-    ],
+    "publish": {
+      "provider": "github",
+      "owner": "crazybki",
+      "repo": "logger"
+    },
     "afterPack": "scripts/afterPack.cjs",
     "files": [
       "dist/**/*",

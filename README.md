@@ -91,6 +91,18 @@ npm run dist
 
 Installer og andre release-filer havner i `release/`.
 
+## Publiser automatisk oppdatering
+
+Appen bruker GitHub Releases som update-feed. Etter at en bruker har installert appen en gang, kan nye versjoner lastes ned av appen automatisk.
+
+```powershell
+npm version patch
+git push
+git push --tags
+```
+
+Dette trigger `.github/workflows/release.yml`, som bygger Windows-installer og publiserer release-filene. Bruk `minor` eller `major` i stedet for `patch` ved storre versjonshopp.
+
 ## Jira-integrasjon
 
 Desktop-appen kan kobles til Jira Cloud for å hente tickets og synkronisere ferdige time entries som worklogs i Jira. Jira-funksjonene virker bare i Electron-appen, ikke i ren webvisning på `localhost`, fordi sikker lagring og Jira-kall kjøres i Electron main process.

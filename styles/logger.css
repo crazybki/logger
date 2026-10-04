@@ -7243,9 +7243,17 @@ select,
     animation: context-menu-enter var(--motion-base) var(--motion-ease-out) both;
 }
 
-.message-toast,
-.todo-reminder {
+.message-toast {
     animation: toast-enter var(--motion-slow) var(--motion-ease-out) both;
+}
+
+@keyframes reminder-enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.todo-reminder {
+    animation: reminder-enter var(--motion-slow) var(--motion-ease-out) both;
 }
 
 .remaining-ring,

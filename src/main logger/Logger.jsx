@@ -1043,6 +1043,8 @@ function Logger() {
   }, [reminderInboxTasks]);
 
   const showStorageWarning = useMemo(() => {
+    // Electron's encrypted file store has no localStorage quota.
+    if (window.loggerAPI?.secureStoreSet) return false;
     if (storagePercent > 20) return false;
 
     const dismissedUntil = storageWarningDismissedUntil
@@ -1322,6 +1324,7 @@ function Logger() {
   }, [entries, secureStoreReady]);
 
   useEffect(() => {
+    if (window.loggerAPI?.secureStoreSet) return;
     try {
       let totalSize = 0;
 
@@ -5746,7 +5749,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                     <strong>{text.jiraSync}</strong>
                     <span>
                       {pendingJiraWorklogEntries.length > 0
-                        ? `${pendingJiraWorklogEntries.length} ${text.pending}`
+                        ? `${pendingJiraWorklogEntries.length} ${appLanguage === "en" ? "unsynced logs" : "usynkede logger"}`
                         : text.synced}
                     </span>
                   </div>

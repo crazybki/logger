@@ -13,6 +13,7 @@ const makePayloadListener = (channel) => (callback) => {
 };
 
 contextBridge.exposeInMainWorld("loggerAPI", {
+  getLoggingProgress: () => ipcRenderer.invoke("logging-progress:today"),
   exportEntriesToCSV: (entries) => ipcRenderer.invoke("log:export-entries", entries),
   importTicketsFromFile: () => ipcRenderer.invoke("tickets:import-file"),
   getAppVersion: () => ipcRenderer.invoke("app:get-version"),
@@ -35,6 +36,7 @@ contextBridge.exposeInMainWorld("loggerAPI", {
   tempoTestConnection: () => ipcRenderer.invoke("tempo:test-connection"),
   tempoSyncWorklogs: (entries) => ipcRenderer.invoke("tempo:sync-worklogs", entries),
   checkForUpdates: () => ipcRenderer.invoke("updates:check"),
+  getUpdateStatus: () => ipcRenderer.invoke("updates:get-status"),
   quitAndInstallUpdate: () => ipcRenderer.invoke("updates:quit-and-install"),
 
   setMiniMode: (isMini) => ipcRenderer.send("window:set-mini-mode", isMini),

@@ -7,6 +7,10 @@ import { Btn } from "../components/Buttons";
 import { Icon } from "../components/Icons";
 import { ReportsView } from "../components/ReportsView";
 import { SettingsView } from "../components/SettingsView";
+import { UpdateStatus } from "../components/UpdateStatus";
+import { LoggingProgress } from "../components/LoggingProgress";
+import { useLoggingProgress } from "../hooks/useLoggingProgress";
+import { DEFAULT_WORK_SCHEDULE, isValidWorkSchedule } from "../utils/loggingProgress";
 import {
   DEFAULT_DAILY_TARGET_SECONDS,
   formatMissingDayLabel,
@@ -168,6 +172,33 @@ const UI_TEXT = {
 };
 
 function Logger() {
+  const [updateState, setUpdateState] = useState({ status: "idle" });
+  async function handleCheckForUpdates() {
+    setUpdateState({ status: "checking" });
+    try {
+      if (!window.loggerAPI?.checkForUpdates) throw new Error("Updates require the desktop app.");
+      const result = await window.loggerAPI.checkForUpdates();
+      if (result.skipped) setUpdateState({ status: "idle", reason: result.reason });
+      else if (!result.ok) setUpdateState({ status: "error", error: result.error });
+      else if (window.loggerAPI.getUpdateStatus) setUpdateState(await window.loggerAPI.getUpdateStatus());
+    } catch (error) { setUpdateState({ status: "error", error: error.message }); }
+  }
+  async function handleInstallUpdate() {
+    try {
+      const result = await window.loggerAPI?.quitAndInstallUpdate();
+      if (!result?.ok) throw new Error(result?.error || "Could not install update.");
+    } catch (error) { setUpdateState(previous => ({ ...previous, error: error.message })); }
+  }
+  const [workSchedule, setWorkSchedule] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("workSchedule"));
+      return isValidWorkSchedule(saved) ? saved : DEFAULT_WORK_SCHEDULE;
+    } catch { return DEFAULT_WORK_SCHEDULE; }
+  });
+  const [progressSyncRevision, setProgressSyncRevision] = useState(0);
+  useEffect(() => {
+    localStorage.setItem("workSchedule", JSON.stringify(workSchedule));
+  }, [workSchedule]);
   const [search, setSearch] = useState("");
   const [selectedTicket, setSelectedTicket] = useState("");
   const [message, setMessage] = useState("");
@@ -732,6 +763,11 @@ function Logger() {
   const todayDateKey = useMemo(() => {
     return getDateKeyFromDate(new Date(nowTick));
   }, [nowTick]);
+  const loggingProgress = useLoggingProgress(
+    todayDateKey,
+    JSON.stringify([jiraStatus, tempoStatus]),
+    progressSyncRevision,
+  );
 
   const countdownSeconds = useMemo(() => {
     const totalSeconds = activeEntries.reduce(
@@ -1449,7 +1485,11 @@ function Logger() {
   useEffect(() => {
     if (!window.loggerAPI?.onUpdateStatus) return;
 
-    return window.loggerAPI.onUpdateStatus((payload = {}) => {
+    let disposed = false;
+    let receivedEvent = false;
+    const unsubscribe = window.loggerAPI.onUpdateStatus((payload = {}) => {
+      receivedEvent = true;
+      setUpdateState(payload);
       if (payload.status === "update-available") {
         notifyRef.current?.({
           type: "info",
@@ -1477,6 +1517,10 @@ function Logger() {
         });
       }
     });
+    window.loggerAPI.getUpdateStatus?.().then(state => {
+      if (!disposed && !receivedEvent) setUpdateState(state);
+    }).catch(() => {});
+    return () => { disposed = true; unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -2947,6 +2991,7 @@ function Logger() {
   }
 
   function handleSaveSettings(nextSettings) {
+    setWorkSchedule(nextSettings.workSchedule);
     setDailyTargetSeconds(nextSettings.dailyTargetSeconds);
     setTrashRetentionDays(nextSettings.trashRetentionDays);
     setThemePreset(nextSettings.themePreset);
@@ -3174,6 +3219,7 @@ function Logger() {
       console.error("Could not sync Jira worklogs:", error);
       setJiraErrorFeedback("Could not sync Jira worklogs", "Jira sync failed");
     } finally {
+      setProgressSyncRevision(value => value + 1);
       setIsJiraBusy(false);
     }
   }
@@ -3374,6 +3420,7 @@ function Logger() {
       });
       setTempoFeedback("Could not sync Tempo worklogs");
     } finally {
+      setProgressSyncRevision(value => value + 1);
       setIsTempoBusy(false);
     }
   }
@@ -5484,6 +5531,7 @@ PROJ-456;2026-05-11;2t`}</pre>
           </div>
         </div>
 
+        <UpdateStatus state={updateState} language={appLanguage} onInstall={handleInstallUpdate} />
         {storageWarning}
         {todoReminder}
         {importGuide}
@@ -5610,6 +5658,10 @@ PROJ-456;2026-05-11;2t`}</pre>
             />
           ) : showSettingsView ? (
             <SettingsView
+              updateState={updateState}
+              onCheckForUpdates={handleCheckForUpdates}
+              onInstallUpdate={handleInstallUpdate}
+              workSchedule={workSchedule}
               dailyTargetSeconds={dailyTargetSeconds}
               trashRetentionDays={trashRetentionDays}
               themePreset={themePreset}
@@ -5709,6 +5761,8 @@ PROJ-456;2026-05-11;2t`}</pre>
                   </button>
                 </div>
               </section>
+
+              <LoggingProgress now={nowTick} schedule={workSchedule} remote={loggingProgress} appLanguage={appLanguage} />
 
               <section className={`section active-ticket-card ${activeEntry ? "running" : ""}`}>
                 <div className="active-ticket-header">

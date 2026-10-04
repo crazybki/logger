@@ -16,6 +16,34 @@ const path = require("path");
 const fs = require("fs");
 const { pathToFileURL } = require("url");
 const { autoUpdater } = require("electron-updater");
+const { createUpdateSchedule } = require("./updateSchedule");
+const { fetchLoggedToday } = require("./loggingProgress");
+
+ipcMain.handle("logging-progress:today", async () => {
+  try {
+    const jira = await getJiraConnectionDetails();
+    const tempoValues = await getTempoSecureValues();
+    const tempoStatus = tempoValues.tempoApiToken ? await getTempoConnectionDetails() : null;
+    const now = new Date();
+    const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const snapshot = await fetchLoggedToday({
+      jira, tempo: tempoStatus, dateKey,
+      request: async (url, authHeader, body) => {
+        const response = await fetch(url, {
+          method: body ? "POST" : "GET",
+          headers: { Authorization: authHeader, Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!response.ok) throw new Error(`Worklog refresh failed (${response.status})`);
+        return response.json();
+      },
+    });
+    return { ok: true, ...snapshot };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+});
 
 let mainWindow;
 let tray;
@@ -25,6 +53,8 @@ let updateCheckPromise = null;
 let isUpdateDownloaded = false;
 let hasStartedUpdateCheck = false;
 let lastUpdateErrorMessage = "";
+let updateState = { status: "idle" };
+const updateSchedule = createUpdateSchedule(checkForUpdates);
 
 const NORMAL_SIZE = { width: 400, height: 700 };
 const MINI_SIZE = { width: 420, height: 305 };
@@ -60,6 +90,7 @@ const TEMPO_SECURE_STORE_KEYS = new Set([
 const DEV_SERVER_URL = "http://localhost:5173";
 
 autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = false;
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.attensi.timelogger");
@@ -114,10 +145,12 @@ function sanitizeDownloadProgress(progress = {}) {
 }
 
 function sendUpdateStatus(status, payload = {}) {
-  mainWindow?.webContents.send("updates:status", {
+  updateState = {
+    ...(status === "downloading" ? { update: updateState.update } : {}),
     status,
     ...payload,
-  });
+  };
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("updates:status", updateState);
 }
 
 function getUpdateErrorMessage(error) {
@@ -135,30 +168,10 @@ function getUpdateErrorMessage(error) {
 
 function sendUpdateError(error) {
   const message = truncateText(getUpdateErrorMessage(error), MAX_NOTIFICATION_LENGTH);
-  if (message === lastUpdateErrorMessage) return;
+  if (message === lastUpdateErrorMessage && updateState.status === "error") return;
 
   lastUpdateErrorMessage = message;
   sendUpdateStatus("error", { error: message });
-}
-
-async function promptForDownloadedUpdate(info = {}) {
-  if (!mainWindow || !isUpdateDownloaded) return;
-
-  const version = truncateText(info.version || "new", 80);
-  const result = await dialog.showMessageBox(mainWindow, {
-    type: "info",
-    buttons: ["Restart now", "Later"],
-    defaultId: 0,
-    cancelId: 1,
-    title: "Update ready",
-    message: `Version ${version} is ready to install.`,
-    detail: "Restart Time Logger to finish the update. Your local data is kept.",
-  });
-
-  if (result.response !== 0 || !isUpdateDownloaded) return;
-
-  isQuitting = true;
-  autoUpdater.quitAndInstall(false, true);
 }
 
 function registerAutoUpdaterEvents() {
@@ -175,13 +188,13 @@ function registerAutoUpdaterEvents() {
   });
 
   autoUpdater.on("update-not-available", (info) => {
-    sendUpdateStatus("update-not-available", {
+    sendUpdateStatus("up-to-date", {
       update: sanitizeUpdateInfo(info),
     });
   });
 
   autoUpdater.on("download-progress", (progress) => {
-    sendUpdateStatus("download-progress", {
+    sendUpdateStatus("downloading", {
       progress: sanitizeDownloadProgress(progress),
     });
   });
@@ -191,7 +204,6 @@ function registerAutoUpdaterEvents() {
     sendUpdateStatus("update-downloaded", {
       update: sanitizeUpdateInfo(info),
     });
-    promptForDownloadedUpdate(info);
   });
 
   autoUpdater.on("error", (error) => {
@@ -212,8 +224,19 @@ async function checkForUpdates() {
     return updateCheckPromise;
   }
 
-  updateCheckPromise = autoUpdater.checkForUpdates()
-    .then(() => ({ ok: true }))
+  if (isUpdateDownloaded || ["update-available", "downloading"].includes(updateState.status)) {
+    return { ok: true };
+  }
+  updateSchedule.markChecked();
+
+  updateCheckPromise = Promise.resolve().then(() => autoUpdater.checkForUpdates())
+    .then((result) => {
+      if (result?.downloadPromise) {
+        if (!isUpdateDownloaded) sendUpdateStatus("downloading", { update: sanitizeUpdateInfo(result.updateInfo) });
+        void result.downloadPromise.catch(sendUpdateError);
+      }
+      return { ok: true };
+    })
     .catch((error) => {
       sendUpdateError(error);
 
@@ -233,7 +256,7 @@ function checkForUpdatesAtStartup() {
   if (hasStartedUpdateCheck) return;
 
   hasStartedUpdateCheck = true;
-  checkForUpdates();
+  if (app.isPackaged) updateSchedule.start();
 }
 
 function createTray() {
@@ -1343,6 +1366,7 @@ ipcMain.handle("app:restart", () => {
 });
 
 ipcMain.handle("updates:check", () => checkForUpdates());
+ipcMain.handle("updates:get-status", () => updateState);
 
 ipcMain.handle("updates:quit-and-install", () => {
   if (!isUpdateDownloaded) {
@@ -2374,6 +2398,7 @@ app.whenReady().then(() => {
   registerShortcuts();
 
   powerMonitor.on("resume", () => {
+    if (app.isPackaged && hasStartedUpdateCheck) updateSchedule.checkIfDue();
     mainWindow?.webContents.send("power:resume");
   });
 
@@ -2393,6 +2418,7 @@ app.whenReady().then(() => {
 });
 
 app.on("will-quit", () => {
+  updateSchedule.stop();
   isQuitting = true;
   globalShortcut.unregisterAll();
 });

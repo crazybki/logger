@@ -5341,6 +5341,34 @@ html {
     cursor: default;
 }
 
+.logging-progress {
+    padding: 14px;
+    border: 1px solid var(--theme-border-strong);
+    border-radius: 12px;
+    background: var(--theme-surface);
+}
+.logging-progress-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.logging-progress-values > div { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.logging-progress-values > div + div { padding-left: 10px; border-left: 1px solid var(--theme-border); }
+.logging-progress-values span { font-size: 11px; color: var(--theme-muted); }
+.logging-progress-values strong { font-size: clamp(16px, 4vw, 21px); font-variant-numeric: tabular-nums; color: var(--theme-text); }
+.logging-progress-values .logging-status-behind strong,
+.logging-progress-values .logging-status-behind span { color: #f49b50; }
+.logging-progress-values .logging-status-ahead strong { color: var(--theme-green); }
+.logging-progress progress { display: block; width: 100%; height: 12px; margin-top: 13px; border: 0; border-radius: 20px; overflow: hidden; appearance: none; }
+.logging-progress progress::-webkit-progress-bar { background: var(--theme-panel); }
+.logging-progress progress::-webkit-progress-value { background: var(--theme-blue); border-radius: 20px; }
+.logging-progress-caption { margin-top: 7px; font-size: 11px; color: var(--theme-muted); }
+.logging-progress-sync { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; font-size: 10px; color: var(--theme-muted); }
+.logging-progress-sync button { background: var(--theme-panel); color: var(--theme-text); border: 1px solid var(--theme-border); border-radius: 5px; padding: 4px 7px; cursor: pointer; }
+.logging-progress-sync button:disabled { opacity: .5; cursor: default; }
+.schedule-weekdays { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+.schedule-weekdays label { display: flex; align-items: center; gap: 3px; }
+
+.update-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; font-size: 11px; color: var(--theme-muted); flex-wrap: wrap; }
+.update-status button { border: 1px solid var(--theme-border-strong); background: var(--theme-panel); color: var(--theme-text); border-radius: 6px; padding: 6px 9px; cursor: pointer; }
+.update-status button:disabled { opacity: .5; cursor: default; }
+
 /* Reference image theme */
 :root {
     --motion-fast: 120ms;

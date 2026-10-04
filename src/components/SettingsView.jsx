@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icons";
+import { UpdateStatus } from "./UpdateStatus";
 import { DEFAULT_DAILY_TARGET_SECONDS, formatTimeShort } from "../utils/reporting";
 import { THEME_PRESETS } from "../utils/themes";
+import { DEFAULT_WORK_SCHEDULE, isValidWorkSchedule } from "../utils/loggingProgress";
 
 function secondsToParts(seconds) {
   const safeSeconds = Math.max(0, Number(seconds) || 0);
@@ -12,6 +14,10 @@ function secondsToParts(seconds) {
 }
 
 export function SettingsView({
+  updateState = { status: "idle" },
+  onCheckForUpdates,
+  onInstallUpdate,
+  workSchedule = DEFAULT_WORK_SCHEDULE,
   dailyTargetSeconds,
   trashRetentionDays,
   themePreset,
@@ -50,6 +56,11 @@ export function SettingsView({
   onOpenBugReport,
   onRestartApp,
 }) {
+  const [schedule, setSchedule] = useState(workSchedule);
+  const scheduleValid = isValidWorkSchedule(schedule);
+  const scheduleText = appLanguage === "en"
+    ? { title: "Work schedule", help: "Used for logging progress. Times use your computer’s local clock.", start: "Workday start", end: "Workday end", lunch: "Break starts", duration: "Break (minutes)", days: "Working days", invalid: "End must follow start; the break must fit inside the workday.", weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] }
+    : { title: "Arbeidstid", help: "Brukes for loggefremdrift. Tidene følger PC-ens lokale klokke.", start: "Arbeidsdag starter", end: "Arbeidsdag slutter", lunch: "Pause starter", duration: "Pause (minutter)", days: "Arbeidsdager", invalid: "Slutt må være etter start, og pausen må være innenfor arbeidsdagen.", weekdays: ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"] };
   const text = appLanguage === "en"
     ? {
         settings: "Settings",
@@ -259,7 +270,7 @@ export function SettingsView({
 
   const nextDailyTargetSeconds =
     (Number(targetHours) || 0) * 3600 + (Number(targetMinutes) || 0) * 60;
-  const canSave = nextDailyTargetSeconds > 0 && Number(retentionDays) > 0;
+  const canSave = nextDailyTargetSeconds > 0 && Number(retentionDays) > 0 && scheduleValid;
   const isJiraCloud = jiraMode !== "server";
   const isJiraServerBasic = jiraMode === "server" && jiraAuthMethod === "basic";
   const isJiraIdentityRequired = isJiraCloud || isJiraServerBasic;
@@ -295,6 +306,7 @@ export function SettingsView({
     if (!canSave) return;
 
     onSave({
+      workSchedule: { ...schedule, breakMinutes: Number(schedule.breakMinutes) },
       dailyTargetSeconds: nextDailyTargetSeconds,
       trashRetentionDays: Math.max(1, Math.floor(Number(retentionDays))),
       themePreset: selectedThemePreset,
@@ -385,6 +397,23 @@ export function SettingsView({
       </div>
 
       <form className="settings-form" onSubmit={handleSave}>
+        <div className="settings-card">
+          <div className="settings-card-copy"><strong>{appLanguage === "en" ? "App updates" : "Appoppdateringer"}</strong></div>
+          <UpdateStatus settings state={updateState} language={appLanguage} onCheck={onCheckForUpdates} onInstall={onInstallUpdate} />
+        </div>
+        <div className="settings-card">
+          <div className="settings-card-copy"><strong>{scheduleText.title}</strong><span>{scheduleText.help}</span></div>
+          <div className="settings-time-grid">
+            {[["start", scheduleText.start], ["end", scheduleText.end], ["breakStart", scheduleText.lunch]].map(([key, label]) => (
+              <label key={key}><span>{label}</span><input required type="time" value={schedule[key]} onChange={event => setSchedule(previous => ({ ...previous, [key]: event.target.value }))} /></label>
+            ))}
+            <label><span>{scheduleText.duration}</span><input required type="number" min="0" max="1439" step="1" value={schedule.breakMinutes} onChange={event => setSchedule(previous => ({ ...previous, breakMinutes: event.target.value }))} /></label>
+          </div>
+          <div className="schedule-weekdays" role="group" aria-label={scheduleText.days}>
+            {[1, 2, 3, 4, 5, 6, 0].map((day, index) => <label key={day}><input type="checkbox" checked={schedule.weekdays.includes(day)} onChange={event => setSchedule(previous => ({ ...previous, weekdays: event.target.checked ? [...previous.weekdays, day] : previous.weekdays.filter(value => value !== day) }))} />{scheduleText.weekdays[index]}</label>)}
+          </div>
+          {!scheduleValid && <p role="alert">{scheduleText.invalid}</p>}
+        </div>
         <div className="settings-card">
           <div className="settings-card-copy">
             <strong>{text.language}</strong>

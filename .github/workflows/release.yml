@@ -47,7 +47,7 @@ jobs:
           $version = (node -p "require('./package.json').version").Trim()
           gh release create "v$version" `
             --title "$version" `
-            --notes "Time Logger $version" `
+            --notes-file "electron/release-notes.md" `
             --target "$env:GITHUB_SHA" `
             --latest
           gh release upload "v$version" `

@@ -1,0 +1,3 @@
+- Company Support Live tickets now appear first in matching searches, with or without hyphens. Exact ticket IDs still take priority.
+- Adding more time to a Jira-synced ticket on the same day now updates its existing worklog. For example, 15 minutes plus 15 minutes becomes one 30-minute worklog after syncing.
+- Update notifications now include expandable release notes. You can also read the installed version's notes in Settings.

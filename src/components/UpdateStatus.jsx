@@ -1,3 +1,5 @@
+import { ReleaseNotes } from "./ReleaseNotes";
+
 export function UpdateStatus({ state, language = "en", onCheck, onInstall, settings = false }) {
   const en = language === "en";
   const status = state.status;
@@ -18,5 +20,6 @@ export function UpdateStatus({ state, language = "en", onCheck, onInstall, setti
     {status === "update-downloaded"
       ? <button type="button" onClick={onInstall}>{en ? "Update & Restart" : "Oppdater og start på nytt"}</button>
       : settings && <button type="button" onClick={onCheck} disabled={busy}>{en ? "Check for updates" : "Se etter oppdateringer"}</button>}
+    {state.update?.releaseNotes && <ReleaseNotes notes={state.update.releaseNotes} language={language} />}
   </div>;
 }

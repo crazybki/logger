@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("loggerAPI", {
   exportEntriesToCSV: (entries) => ipcRenderer.invoke("log:export-entries", entries),
   importTicketsFromFile: () => ipcRenderer.invoke("tickets:import-file"),
   getAppVersion: () => ipcRenderer.invoke("app:get-version"),
+  getAppReleaseInfo: () => ipcRenderer.invoke("app:get-release-info"),
   restartApp: () => ipcRenderer.invoke("app:restart"),
   showNotification: (options) => ipcRenderer.invoke("notification:show", options),
   openBugReportIssue: () => ipcRenderer.invoke("bug-report:open-issue-template"),

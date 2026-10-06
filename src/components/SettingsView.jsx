@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icons";
 import { UpdateStatus } from "./UpdateStatus";
+import { ReleaseNotes } from "./ReleaseNotes";
 import { DEFAULT_DAILY_TARGET_SECONDS, formatTimeShort } from "../utils/reporting";
 import { THEME_PRESETS } from "../utils/themes";
 import { DEFAULT_WORK_SCHEDULE, isValidWorkSchedule } from "../utils/loggingProgress";
@@ -24,6 +25,7 @@ export function SettingsView({
   themeAccentColor,
   appLanguage = "en",
   appVersion = "",
+  installedReleaseNotes = "",
   accentColors,
   jiraStatus = {},
   jiraFeedback = "",
@@ -400,6 +402,7 @@ export function SettingsView({
         <div className="settings-card">
           <div className="settings-card-copy"><strong>{appLanguage === "en" ? "App updates" : "Appoppdateringer"}</strong></div>
           <UpdateStatus settings state={updateState} language={appLanguage} onCheck={onCheckForUpdates} onInstall={onInstallUpdate} />
+          {installedReleaseNotes && <div><span>{appLanguage === "en" ? "Installed version" : "Installert versjon"}: {appVersion}</span><ReleaseNotes notes={installedReleaseNotes} language={appLanguage} /></div>}
         </div>
         <div className="settings-card">
           <div className="settings-card-copy"><strong>{scheduleText.title}</strong><span>{scheduleText.help}</span></div>

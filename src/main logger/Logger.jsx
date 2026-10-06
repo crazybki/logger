@@ -1,4 +1,6 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { getMatchingJiraTickets } from "../utils/ticketSearch";
+import { canExtendJiraWorklog, isJiraWorklogPending, withJiraSyncBaseline } from "../utils/jiraWorklogs";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardCheck, FilePenLine, Trash2 } from "lucide-react";
 import "../../styles/logger.css";
 import WindowTitleBar from "../main logger/WindowTitleBar";
@@ -8,6 +10,7 @@ import { Icon } from "../components/Icons";
 import { ReportsView } from "../components/ReportsView";
 import { SettingsView } from "../components/SettingsView";
 import { UpdateStatus } from "../components/UpdateStatus";
+import { ReleaseNotes } from "../components/ReleaseNotes";
 import { LoggingProgress } from "../components/LoggingProgress";
 import { useLoggingProgress } from "../hooks/useLoggingProgress";
 import { DEFAULT_WORK_SCHEDULE, isValidWorkSchedule } from "../utils/loggingProgress";
@@ -172,6 +175,7 @@ const UI_TEXT = {
 };
 
 function Logger() {
+  const jiraSyncInFlightRef = useRef(new Set());
   const [updateState, setUpdateState] = useState({ status: "idle" });
   async function handleCheckForUpdates() {
     setUpdateState({ status: "checking" });
@@ -266,6 +270,7 @@ function Logger() {
     }
   });
   const [appVersion, setAppVersion] = useState("");
+  const [installedReleaseNotes, setInstalledReleaseNotes] = useState("");
   const [jiraStatus, setJiraStatus] = useState({
     jiraMode: "cloud",
     jiraAuthMethod: "bearer",
@@ -436,7 +441,7 @@ function Logger() {
     return normalizeExternalErrorText(message);
   }
 
-  function addNotification({ type = "info", title = "", message = "", source = "app" } = {}) {
+  function addNotification({ type = "info", title = "", message = "", source = "app", releaseNotes = "" } = {}) {
     const allowedTypes = new Set(["error", "warning", "success", "info"]);
     const allowedSources = new Set(["jira", "tempo", "app", "import", "update"]);
     const notification = {
@@ -447,13 +452,14 @@ function Logger() {
       timestamp: new Date().toISOString(),
       source: allowedSources.has(source) ? source : "app",
       read: false,
+      releaseNotes: source === "update" ? String(releaseNotes).slice(0, 12000) : "",
     };
 
     setNotifications((prev) => [notification, ...prev].slice(0, 50));
     return notification;
   }
 
-  function notify({ type = "info", title = "", message: notificationMessage = "", source = "app", toastMessage = "" } = {}) {
+  function notify({ type = "info", title = "", message: notificationMessage = "", source = "app", toastMessage = "", releaseNotes = "" } = {}) {
     const displayMessage = type === "error" ? getDisplayErrorMessage(notificationMessage) : notificationMessage;
     const displayToastMessage = type === "error" ? getDisplayErrorMessage(toastMessage || displayMessage || title) : toastMessage;
     const toast = sanitizeNotificationText(displayToastMessage || displayMessage || title, 160);
@@ -464,6 +470,7 @@ function Logger() {
       title,
       message: displayMessage || toast,
       source,
+      releaseNotes,
     });
   }
 
@@ -561,6 +568,7 @@ function Logger() {
   function canMergeTicketEntry(entry) {
     return (
       entry &&
+      !jiraSyncInFlightRef.current.has(entry.id) &&
       !entry.deletedAt &&
       entry.status === "done" &&
       entry.source !== "todo" &&
@@ -609,10 +617,11 @@ function Logger() {
     if (!canMergeTicketEntry(completedEntry)) return entryList;
 
     const mergeKey = getTicketMergeKey(completedEntry);
-    const targetEntry = entryList.find(
+    const candidates = [...entryList].sort((a, b) => Number(Boolean(b.jiraWorklogId)) - Number(Boolean(a.jiraWorklogId)));
+    const targetEntry = candidates.find(
       (entry) =>
         entry.id !== entryId &&
-        canMergeTicketEntry(entry) &&
+        (canExtendJiraWorklog(entry) || canMergeTicketEntry(entry)) &&
         getTicketMergeKey(entry) === mergeKey
     );
 
@@ -622,7 +631,7 @@ function Logger() {
       .map((entry) =>
         entry.id === targetEntry.id
           ? {
-            ...entry,
+            ...withJiraSyncBaseline(entry),
             seconds: entry.seconds + completedEntry.seconds,
             ...mergeHandoverFields(entry, completedEntry),
           }
@@ -635,8 +644,9 @@ function Logger() {
     if (!canMergeTicketEntry(newEntry)) return [newEntry, ...entryList];
 
     const mergeKey = getTicketMergeKey(newEntry);
-    const targetEntry = entryList.find(
-      (entry) => canMergeTicketEntry(entry) && getTicketMergeKey(entry) === mergeKey
+    const candidates = [...entryList].sort((a, b) => Number(Boolean(b.jiraWorklogId)) - Number(Boolean(a.jiraWorklogId)));
+    const targetEntry = candidates.find(
+      (entry) => (canExtendJiraWorklog(entry) || canMergeTicketEntry(entry)) && getTicketMergeKey(entry) === mergeKey
     );
 
     if (!targetEntry) return [newEntry, ...entryList];
@@ -644,7 +654,7 @@ function Logger() {
     return entryList.map((entry) =>
       entry.id === targetEntry.id
         ? {
-          ...entry,
+          ...withJiraSyncBaseline(entry),
           seconds: entry.seconds + newEntry.seconds,
           ...mergeHandoverFields(entry, newEntry),
         }
@@ -679,7 +689,7 @@ function Logger() {
         entry.status === "done" &&
         entry.source !== "todo" &&
         !entry.todoTaskId &&
-        !entry.jiraWorklogId &&
+        isJiraWorklogPending(entry) &&
         String(entry.ticketName ?? "").trim() &&
         Number(entry.seconds) > 0
       )
@@ -883,64 +893,11 @@ function Logger() {
     return groups;
   }, [activeEntries]);
 
-  function getMatchingJiraTickets(queryValue) {
-    const query = String(queryValue ?? "").trim().toLowerCase();
-    if (!query) return jiraTickets;
-
-    function getSearchParts(value) {
-      return String(value ?? "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, " ")
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
-    }
-
-    function searchPartMatches(queryPart, ticketParts) {
-      const aliases = queryPart === "support"
-        ? ["support", "supp"]
-        : queryPart === "supp"
-          ? ["supp", "support"]
-          : [queryPart];
-
-      return aliases.some((alias) =>
-        ticketParts.some((part) => part.includes(alias) || alias.includes(part))
-      );
-    }
-
-    function fuzzyMatches(combined) {
-      const queryParts = getSearchParts(query);
-      if (!queryParts.length) return false;
-
-      const ticketParts = getSearchParts(combined);
-      return queryParts.every((part) => searchPartMatches(part, ticketParts));
-    }
-
-    function scoreTicket(ticket) {
-      const id = String(ticket.id ?? "").toLowerCase();
-      const title = String(ticket.title ?? "").toLowerCase();
-      const combined = `${id} ${title}`;
-
-      if (id === query) return 0;
-      if (id.startsWith(query)) return 1;
-      if (title.startsWith(query)) return 2;
-      if (combined.includes(query)) return 3;
-      if (fuzzyMatches(combined)) return 4;
-      return 99;
-    }
-
-    return jiraTickets
-      .map((ticket, index) => ({ ticket, index, score: scoreTicket(ticket) }))
-      .filter((item) => item.score < 99)
-      .sort((a, b) => a.score - b.score || a.index - b.index)
-      .map((item) => item.ticket);
-  }
-
-  const filteredTickets = getMatchingJiraTickets(search);
+  const filteredTickets = getMatchingJiraTickets(jiraTickets, search);
   const visibleSearchTickets = isSearchOpen && search.trim() ? filteredTickets.slice(0, 5) : [];
-  const miniTicketSuggestions = miniTicket.trim() ? getMatchingJiraTickets(miniTicket).slice(0, 5) : [];
+  const miniTicketSuggestions = miniTicket.trim() ? getMatchingJiraTickets(jiraTickets, miniTicket).slice(0, 5) : [];
   const manualTicketSuggestions = manualEntryType === "ticket"
-    ? getMatchingJiraTickets(manualTicket).slice(0, 5)
+    ? getMatchingJiraTickets(jiraTickets, manualTicket).slice(0, 5)
     : [];
 
   const selectedFavoriteTicket = useMemo(() => {
@@ -1227,6 +1184,21 @@ function Logger() {
       try {
         const version = await window.loggerAPI.getAppVersion();
         if (!cancelled) setAppVersion(String(version || ""));
+        const info = await window.loggerAPI.getAppReleaseInfo?.();
+        if (cancelled || !info) return;
+        setInstalledReleaseNotes(info.releaseNotes || "");
+        if (info.packaged && info.version && info.releaseNotes) {
+          let seen = "";
+          try { seen = localStorage.getItem("lastReleaseNotesVersion"); } catch { /* Storage may be unavailable. */ }
+          if (seen !== info.version) {
+            notifyRef.current?.({
+              type: "success", title: `What's new in v${info.version}`,
+              message: "See what's new in this version. Open the notification bell to read the release notes.",
+              source: "update", releaseNotes: info.releaseNotes,
+            });
+            try { localStorage.setItem("lastReleaseNotesVersion", info.version); } catch { /* Keep the notes available in Settings. */ }
+          }
+        }
       } catch (error) {
         console.error("Could not load app version:", error);
       }
@@ -1499,6 +1471,7 @@ function Logger() {
           title: "Update available",
           message: `Version ${payload.update?.version || "new"} is available.`,
           source: "update",
+          releaseNotes: payload.update?.releaseNotes,
         });
       }
 
@@ -1508,6 +1481,7 @@ function Logger() {
           title: "Update ready",
           message: `Version ${payload.update?.version || "new"} is ready. Restart to install.`,
           source: "update",
+          releaseNotes: payload.update?.releaseNotes,
         });
       }
 
@@ -2780,7 +2754,10 @@ function Logger() {
       sourceEntry.source !== "todo" &&
       targetEntry.source !== "todo" &&
       !sourceEntry.todoTaskId &&
-      !targetEntry.todoTaskId
+      !targetEntry.todoTaskId &&
+      !sourceEntry.jiraWorklogId && !targetEntry.jiraWorklogId &&
+      !sourceEntry.tempoWorklogId && !targetEntry.tempoWorklogId &&
+      !jiraSyncInFlightRef.current.has(sourceEntry.id) && !jiraSyncInFlightRef.current.has(targetEntry.id)
     );
   }
 
@@ -3152,6 +3129,7 @@ function Logger() {
   }
 
   async function handleSyncJiraWorklogs(targetEntries) {
+    if (jiraSyncInFlightRef.current.size) return;
     const entriesToSync = Array.isArray(targetEntries) ? targetEntries : pendingJiraWorklogEntries;
 
     if (!window.loggerAPI?.jiraSyncWorklogs) {
@@ -3166,6 +3144,7 @@ function Logger() {
     }
 
     const isSingleEntrySync = entriesToSync.length === 1;
+    jiraSyncInFlightRef.current = new Set(entriesToSync.map(entry => entry.id));
     setIsJiraBusy(true);
     setJiraDefaultFeedback(
       isSingleEntrySync
@@ -3192,6 +3171,8 @@ function Logger() {
               jiraWorklogId: syncedResult.worklog.id,
               jiraWorklogSelf: syncedResult.worklog.self,
               jiraSyncedAt: syncedAt,
+              jiraIssueKey: syncedResult.issueKey,
+              jiraSyncedSeconds: syncedResult.worklog.timeSpentSeconds,
             };
           })
         );
@@ -3222,6 +3203,7 @@ function Logger() {
       console.error("Could not sync Jira worklogs:", error);
       setJiraErrorFeedback("Could not sync Jira worklogs", "Jira sync failed");
     } finally {
+      jiraSyncInFlightRef.current.clear();
       setProgressSyncRevision(value => value + 1);
       setIsJiraBusy(false);
     }
@@ -3636,6 +3618,16 @@ function Logger() {
 
   function handleSaveEditedEntry() {
     if (!editingEntryId) return;
+    if (jiraSyncInFlightRef.current.has(editingEntryId)) {
+      setMessage("Wait for Jira sync to finish before editing this entry.");
+      return;
+    }
+    const original = entries.find(entry => entry.id === editingEntryId);
+    if (original?.jiraWorklogId &&
+        (editDate !== getDateKey(original) || editTicket.trim() !== original.ticketName.trim())) {
+      setMessage("You can change the duration of a synced Jira entry. Use a new entry for a different ticket or day.");
+      return;
+    }
 
     if (!editTicket.trim()) {
       setMessage("Skriv inn ticket-navn");
@@ -3668,7 +3660,7 @@ function Logger() {
         }
 
         const syncedEntry = applyElapsedTime(entry, timestamp);
-        const wasSyncedExternally = Boolean(syncedEntry.jiraWorklogId || syncedEntry.tempoWorklogId);
+        const wasSyncedExternally = Boolean(syncedEntry.tempoWorklogId);
         const timeDeltaSeconds = totalSeconds - Number(syncedEntry.seconds || 0);
 
         if (wasSyncedExternally && timeDeltaSeconds > 0) {
@@ -3688,7 +3680,7 @@ function Logger() {
         }
 
         return {
-          ...syncedEntry,
+          ...withJiraSyncBaseline(syncedEntry),
           ticketName: editTicket.trim(),
           seconds: totalSeconds,
           createdAt: editDate,
@@ -5338,6 +5330,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                       <span className="notification-source">{notification.source}</span>
                     </span>
                   </button>
+                  <ReleaseNotes notes={notification.releaseNotes} language={appLanguage} onRead={() => markNotificationRead(notification.id)} />
                 </li>
               ))}
             </ul>
@@ -5671,6 +5664,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               themeAccentColor={themeAccentColor}
               appLanguage={appLanguage}
               appVersion={appVersion}
+              installedReleaseNotes={installedReleaseNotes}
               accentColors={ACCENT_COLORS}
               jiraStatus={jiraStatus}
               jiraFeedback={jiraFeedback}
@@ -6171,7 +6165,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                               {entry.jiraWorklogId && (
                                 <>
                                   <span className="entry-meta-separator">-</span>
-                                  <span className="entry-jira-sync">Jira synced</span>
+                                  <span className="entry-jira-sync">{isJiraWorklogPending(entry) ? "Jira update pending" : "Jira synced"}</span>
                                 </>
                               )}
                               {entry.tempoWorklogId && (

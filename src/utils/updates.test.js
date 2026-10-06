@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { EventEmitter } from "node:events";
 import scheduleModule from "../../electron/updateSchedule.js";
+import releaseNotesModule from "../../electron/releaseNotes.js";
 
 afterEach(() => vi.useRealTimers());
 
@@ -44,6 +45,7 @@ function setup(packaged = true) {
   autoUpdater.checkForUpdates = vi.fn().mockResolvedValue(null);
   const send = vi.fn();
   const context = {
+    normalizeReleaseNotes: releaseNotesModule.normalizeReleaseNotes,
     autoUpdater, app: { isPackaged: packaged },
     mainWindow: { isDestroyed: () => false, webContents: { send } },
     updateState: { status: "idle" }, updateCheckPromise: null, isUpdateDownloaded: false,

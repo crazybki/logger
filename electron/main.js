@@ -16,6 +16,8 @@ const path = require("path");
 const fs = require("fs");
 const { pathToFileURL } = require("url");
 const { autoUpdater } = require("electron-updater");
+const { normalizeReleaseNotes } = require("./releaseNotes");
+const { updateJiraWorklog } = require("./updateJiraWorklog");
 const { createUpdateSchedule } = require("./updateSchedule");
 const { fetchLoggedToday } = require("./loggingProgress");
 
@@ -127,6 +129,7 @@ function sanitizeUpdateInfo(info = {}) {
     version: truncateText(info.version, 80),
     releaseName: truncateText(info.releaseName, 160),
     releaseDate: truncateText(info.releaseDate, 80),
+    releaseNotes: normalizeReleaseNotes(info.releaseNotes),
   };
 }
 
@@ -928,6 +931,8 @@ function normalizeJiraWorklogEntry(entry) {
     displayName,
     started: formatJiraStarted(entry.createdAt),
     timeSpentSeconds,
+    jiraWorklogId: truncateText(entry.jiraWorklogId, 80),
+    jiraSyncedSeconds: entry.jiraSyncedSeconds == null ? NaN : Number(entry.jiraSyncedSeconds),
   };
 }
 
@@ -1357,6 +1362,11 @@ ipcMain.on("window:close", () => {
 });
 
 ipcMain.handle("app:get-version", () => app.getVersion());
+ipcMain.handle("app:get-release-info", async () => ({
+  version: app.getVersion(),
+  packaged: app.isPackaged,
+  releaseNotes: normalizeReleaseNotes(await fs.promises.readFile(path.join(__dirname, "release-notes.md"), "utf8").catch(() => "")),
+}));
 
 ipcMain.handle("app:restart", () => {
   isQuitting = true;
@@ -2053,7 +2063,10 @@ ipcMain.handle("jira:sync-worklogs", async (_, entries = []) => {
           continue;
         }
 
-        const response = await fetch(
+        const worklogUrl = `${jiraBaseUrl}/rest/api/${jiraMode === "server" ? "2" : "3"}/issue/${encodeURIComponent(entry.issueKey)}/worklog`;
+        const response = entry.jiraWorklogId
+          ? await updateJiraWorklog({ url: `${worklogUrl}/${encodeURIComponent(entry.jiraWorklogId)}`, entry, authHeader })
+          : await fetch(
           `${jiraBaseUrl}/rest/api/${jiraMode === "server" ? "2" : "3"}/issue/${encodeURIComponent(entry.issueKey)}/worklog?adjustEstimate=leave`,
           {
             method: "POST",

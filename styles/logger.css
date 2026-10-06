@@ -5369,6 +5369,11 @@ html {
 .update-status button { border: 1px solid var(--theme-border-strong); background: var(--theme-panel); color: var(--theme-text); border-radius: 6px; padding: 6px 9px; cursor: pointer; }
 .update-status button:disabled { opacity: .5; cursor: default; }
 
+.release-notes { width: 100%; font-size: 12px; color: var(--theme-text); }
+.release-notes summary { cursor: pointer; padding: 8px 0; color: var(--theme-blue); }
+.release-notes > div { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; max-height: 260px; overflow-y: auto; }
+.notification-item > .release-notes { box-sizing: border-box; padding: 0 12px 10px; }
+
 /* Reference image theme */
 :root {
     --motion-fast: 120ms;

@@ -22,6 +22,7 @@ export function SettingsView({
   dailyTargetSeconds,
   trashRetentionDays,
   themePreset,
+  favoritePreferences = { buttons: false, searchFirst: true },
   themeAccentColor,
   appLanguage = "en",
   appVersion = "",
@@ -34,6 +35,8 @@ export function SettingsView({
   tempoFeedback = "",
   tempoSyncResults = [],
   jiraProjects = [],
+  jiraProjectFilters = {},
+  onChangeJiraProjectFilter,
   selectedJiraProjectKeys = [],
   jiraTicketQuery = "",
   isJiraFetchingTickets = false,
@@ -235,6 +238,7 @@ export function SettingsView({
   const [selectedThemePreset, setSelectedThemePreset] = useState(themePreset || "default");
   const [selectedAccentColor, setSelectedAccentColor] = useState(themeAccentColor || "");
   const [selectedLanguage, setSelectedLanguage] = useState(appLanguage || "en");
+  const [selectedFavoritePreferences, setSelectedFavoritePreferences] = useState(favoritePreferences);
   const [jiraMode, setJiraMode] = useState(jiraStatus.jiraMode || "cloud");
   const [jiraAuthMethod, setJiraAuthMethod] = useState(jiraStatus.jiraAuthMethod || "bearer");
   const [jiraBaseUrl, setJiraBaseUrl] = useState(jiraStatus.jiraBaseUrl || "");
@@ -308,6 +312,7 @@ export function SettingsView({
     if (!canSave) return;
 
     onSave({
+      favoritePreferences: selectedFavoritePreferences,
       workSchedule: { ...schedule, breakMinutes: Number(schedule.breakMinutes) },
       dailyTargetSeconds: nextDailyTargetSeconds,
       trashRetentionDays: Math.max(1, Math.floor(Number(retentionDays))),
@@ -399,6 +404,22 @@ export function SettingsView({
       </div>
 
       <form className="settings-form" onSubmit={handleSave}>
+        <div className="settings-card favorite-settings">
+          <div className="settings-card-copy">
+            <strong>{appLanguage === "en" ? "Favorite tickets" : "Favoritt-tickets"}</strong>
+            <span>{appLanguage === "en" ? "Applies to timer search and manual entry." : "Gjelder timersøk og manuell registrering."}</span>
+          </div>
+          <label>
+            <input type="checkbox" checked={selectedFavoritePreferences.buttons}
+              onChange={event => setSelectedFavoritePreferences(prev => ({ ...prev, buttons: event.target.checked }))} />
+            {appLanguage === "en" ? "Show favorites as shortcut buttons" : "Vis favoritter som hurtigknapper"}
+          </label>
+          <label>
+            <input type="checkbox" checked={selectedFavoritePreferences.searchFirst}
+              onChange={event => setSelectedFavoritePreferences(prev => ({ ...prev, searchFirst: event.target.checked }))} />
+            {appLanguage === "en" ? "Show matching favorites first in search" : "Vis matchende favoritter øverst i søk"}
+          </label>
+        </div>
         <div className="settings-card">
           <div className="settings-card-copy"><strong>{appLanguage === "en" ? "App updates" : "Appoppdateringer"}</strong></div>
           <UpdateStatus settings state={updateState} language={appLanguage} onCheck={onCheckForUpdates} onInstall={onInstallUpdate} />
@@ -698,7 +719,8 @@ export function SettingsView({
                   const selected = selectedJiraProjectKeys.includes(project.key);
 
                   return (
-                    <label key={project.key} className={selected ? "selected" : ""}>
+                    <div key={project.key} className="jira-project-row">
+                    <label className={selected ? "selected" : ""}>
                       <input
                         type="checkbox"
                         checked={selected}
@@ -710,6 +732,19 @@ export function SettingsView({
                         {project.name && <small>{project.name}</small>}
                       </span>
                     </label>
+                    <label className="jira-project-filter">
+                      <span>{appLanguage === "en" ? "Title must contain" : "Tittelen må inneholde"}</span>
+                      <input
+                        type="text"
+                        aria-label={`${project.key}: ${appLanguage === "en" ? "Title filter" : "Tittelfilter"}`}
+                        value={jiraProjectFilters[project.key] || ""}
+                        onChange={(event) => onChangeJiraProjectFilter?.(project.key, event.target.value)}
+                        placeholder="Norge AS support live"
+                        maxLength={120}
+                        disabled={isJiraFetchingTickets}
+                      />
+                    </label>
+                    </div>
                   );
                 })
               ) : (
@@ -717,6 +752,11 @@ export function SettingsView({
               )}
             </div>
 
+            <span className="jira-filter-help">
+              {appLanguage === "en"
+                ? "Project filters are saved automatically and apply to fetching and ticket search. All words must appear in the title, in any order. Case, spaces and punctuation are ignored; support also matches supp. Leave empty for all titles."
+                : "Prosjektfiltre lagres automatisk og gjelder henting og ticketsøk. Alle ordene må finnes i tittelen, i valgfri rekkefølge. Store/små bokstaver, mellomrom og tegnsetting ignoreres; support matcher også supp. Tomt felt viser alle titler."}
+            </span>
             <label className="settings-single-input">
               <span>{text.ticketFilter}</span>
               <input

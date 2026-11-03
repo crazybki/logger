@@ -1,3 +1,4 @@
-- Company Support Live tickets now appear first in matching searches, with or without hyphens. Exact ticket IDs still take priority.
-- Adding more time to a Jira-synced ticket on the same day now updates its existing worklog. For example, 15 minutes plus 15 minutes becomes one 30-minute worklog after syncing.
-- Update notifications now include expandable release notes. You can also read the installed version's notes in Settings.
+- Favorite tickets can appear first in matching searches and as optional shortcut buttons. Manual Entry now includes a favorites view and controls to star tickets.
+- Each Jira project can have its own saved title filter for importing and searching tickets. Filters ignore case, punctuation and word order, and recognize both support and supp.
+- The Task tab now creates a task with a reminder date and time instead of logging a duration. This also works in the mini window.
+- Completed missing English translations for tasks, reminders, context menus, import help and feedback messages while retaining Norwegian translations.

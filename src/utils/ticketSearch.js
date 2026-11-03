@@ -1,6 +1,7 @@
-export function getMatchingJiraTickets(jiraTickets, queryValue) {
+export function getMatchingJiraTickets(jiraTickets, queryValue, favoritesFirst = true) {
   const query = String(queryValue ?? "").trim().toLowerCase();
-  if (!query) return jiraTickets;
+  const favoriteFirst = (a, b) => favoritesFirst ? Number(Boolean(b.favorite)) - Number(Boolean(a.favorite)) : 0;
+  if (!query) return [...jiraTickets].sort(favoriteFirst);
 
   function getSearchParts(value) {
     return String(value ?? "")
@@ -53,7 +54,7 @@ export function getMatchingJiraTickets(jiraTickets, queryValue) {
   return jiraTickets
     .map((ticket, index) => ({ ticket, index, score: scoreTicket(ticket) }))
     .filter((item) => item.score < 99)
-    .sort((a, b) => a.score - b.score || a.index - b.index)
+    .sort((a, b) => favoriteFirst(a.ticket, b.ticket) || a.score - b.score || a.index - b.index)
     .map((item) => item.ticket);
 }
 

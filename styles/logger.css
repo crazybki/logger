@@ -2540,6 +2540,31 @@ body {
     margin: 0;
 }
 
+.jira-project-row {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.jira-project-list .jira-project-filter {
+    align-items: stretch;
+    flex-direction: column;
+    cursor: text;
+    color: var(--theme-muted);
+    font-size: 11px;
+}
+
+.jira-project-filter input {
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    background: var(--theme-field);
+    color: var(--theme-text);
+    border: 1px solid var(--theme-field-border);
+    border-radius: 5px;
+    padding: 7px;
+}
+
 .jira-project-list label {
     align-items: center;
     background: var(--theme-field);
@@ -4720,6 +4745,53 @@ html {
 
 .manual-ticket-suggestions button:hover {
     border-color: var(--theme-border-strong);
+}
+
+.manual-ticket-suggestions li {
+    display: flex;
+    gap: 4px;
+}
+
+.manual-ticket-suggestions li > button:first-child {
+    min-width: 0;
+    flex: 1;
+}
+
+.manual-ticket-suggestions .manual-favorite-toggle {
+    width: 32px;
+    flex-shrink: 0;
+    justify-content: center;
+}
+
+.manual-favorite-toggle[aria-pressed="true"] {
+    color: #f6c85f;
+}
+
+.favorite-shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.favorite-shortcuts button, .manual-show-favorites {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--theme-field);
+    color: var(--theme-text);
+    border: 1px solid var(--theme-field-border);
+    border-radius: 7px;
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
+.favorite-settings > label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--theme-text);
+    font-size: 12px;
 }
 
 .manual-ticket-suggestions li.highlighted button {

@@ -1,4 +1,6 @@
+import { UI_TEXT } from "../utils/uiText";
 import { getMatchingJiraTickets } from "../utils/ticketSearch";
+import { matchesProjectFilter } from "../../electron/jiraProjectFilters.mjs";
 import { canExtendJiraWorklog, isJiraWorklogPending, withJiraSyncBaseline } from "../utils/jiraWorklogs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardCheck, FilePenLine, Trash2 } from "lucide-react";
@@ -37,142 +39,6 @@ const SECURE_STORE_KEYS = [
 const DEMO_TICKET_IDS = new Set(["ABC-123", "ABC-456", "ABC-789", "ABC-321", "ABC-654"]);
 const SHOW_COUNTDOWN_SECTION = false;
 
-const UI_TEXT = {
-  no: {
-    reminders: "Påminnelser",
-    tasks: "Tasks",
-    review: "Review",
-    endDay: "Avslutt dag",
-    export: "Eksport",
-    dueNow: "Nå",
-    scheduled: "Planlagt",
-    noReminders: "Ingen task-påminnelser",
-    snoozedUntil: "Utsatt til",
-    done: "Ferdig",
-    logged: "Logget",
-    remaining: "Gjenstår",
-    add: "Legg til",
-    closeDay: "Lukk dag",
-    noActiveOrTasks: "Ingen aktiv timer eller åpne tasks",
-    today: "I dag",
-    thisWeek: "Denne uka",
-    tasksOnly: "Kun tasks",
-    allActive: "Alle aktive",
-    copyJira: "Kopier Jira",
-    copyHandover: "Kopier handover",
-    handover: "Handover",
-    preview: "Preview",
-    noEntriesPreset: "Ingen entries i valgt preset",
-    all: "All",
-    overdue: "Overdue",
-    noReminder: "Uten tid",
-    back: "Tilbake",
-    activeTicket: "Aktiv ticket",
-    noActiveTicket: "Ingen aktiv ticket",
-    running: "Kjører",
-    startOrSelect: "Start eller velg ticket under",
-    switchTicket: "Bytt",
-    remainingToday: "Gjenstår i dag",
-    addTask: "Legg til",
-    newTaskPlaceholder: "Ny task...",
-    startTicketPlaceholder: "Start ticket...",
-    longTimer: "Lang timer",
-    loggedWord: "logget",
-    isThisRight: "Stemmer dette?",
-    looksRight: "Stemmer",
-    adjust: "Juster",
-    open: "Åpne",
-    hide: "Skjul",
-    active: "aktive",
-    noneActiveTasks: "Ingen aktive tasks",
-    loggedTime: "Logget tid",
-    notifications: "Varsler",
-    unread: "ulest",
-    allRead: "Alt lest",
-    markAllRead: "Marker alle lest",
-    clearAll: "Tøm alle",
-    noNotifications: "Ingen varsler",
-    jiraSync: "Jira Sync",
-    synced: "Synket",
-    pending: "venter",
-    sync: "Synk",
-    syncTicket: "Synk ticket",
-    ticketSearchPlaceholder: "Søk eller skriv ticket (f.eks. KAN-9)",
-    recentActivity: "Siste aktivitet",
-    viewAll: "Vis alle",
-    noTimeLoggedYet: "Ingen tid logget ennå",
-    deleteDay: "Slett dag",
-    confirmDeleteDay: "Flytte alle entries for denne dagen til papirkurven?",
-    dayEntriesDeleted: "Dagens entries flyttet til papirkurv",
-  },
-  en: {
-    reminders: "Reminders",
-    tasks: "Tasks",
-    review: "Review",
-    endDay: "End day",
-    export: "Export",
-    dueNow: "Due now",
-    scheduled: "Scheduled",
-    noReminders: "No task reminders",
-    snoozedUntil: "Snoozed until",
-    done: "Done",
-    logged: "Logged",
-    remaining: "Remaining",
-    add: "Add",
-    closeDay: "Close day",
-    noActiveOrTasks: "No active timer or open tasks",
-    today: "Today",
-    thisWeek: "This week",
-    tasksOnly: "Tasks only",
-    allActive: "All active",
-    copyJira: "Copy Jira",
-    copyHandover: "Copy handover",
-    handover: "Handover",
-    preview: "Preview",
-    noEntriesPreset: "No entries in selected preset",
-    all: "All",
-    overdue: "Overdue",
-    noReminder: "No reminder",
-    back: "Back",
-    activeTicket: "Active ticket",
-    noActiveTicket: "No active ticket",
-    running: "Running",
-    startOrSelect: "Start or select a ticket below",
-    switchTicket: "Switch",
-    remainingToday: "Remaining today",
-    addTask: "Add",
-    newTaskPlaceholder: "Capture task...",
-    startTicketPlaceholder: "Start ticket...",
-    longTimer: "Long timer",
-    loggedWord: "logged",
-    isThisRight: "Is this right?",
-    looksRight: "Looks right",
-    adjust: "Adjust",
-    open: "Open",
-    hide: "Hide",
-    active: "active",
-    noneActiveTasks: "No active tasks",
-    loggedTime: "Logged time",
-    notifications: "Notifications",
-    unread: "unread",
-    allRead: "All read",
-    markAllRead: "Mark all read",
-    clearAll: "Clear all",
-    noNotifications: "No notifications",
-    jiraSync: "Jira Sync",
-    synced: "Synced",
-    pending: "pending",
-    sync: "Sync",
-    syncTicket: "Sync ticket",
-    ticketSearchPlaceholder: "Search or type ticket (e.g. KAN-9)",
-    recentActivity: "Recent Activity",
-    viewAll: "View all",
-    noTimeLoggedYet: "No time logged yet",
-    deleteDay: "Delete day",
-    confirmDeleteDay: "Move all entries for this day to trash?",
-    dayEntriesDeleted: "Day entries moved to trash",
-  },
-};
 
 function Logger() {
   const jiraSyncInFlightRef = useRef(new Set());
@@ -289,6 +155,17 @@ function Logger() {
   const [isTempoBusy, setIsTempoBusy] = useState(false);
   const [tempoSyncResults, setTempoSyncResults] = useState([]);
   const [jiraProjects, setJiraProjects] = useState([]);
+  const [jiraProjectFilters, setJiraProjectFilters] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("jiraProjectFilters") || "{}");
+      return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem("jiraProjectFilters", JSON.stringify(jiraProjectFilters));
+  }, [jiraProjectFilters]);
   const [selectedJiraProjectKeys, setSelectedJiraProjectKeys] = useState(() => {
     try {
       const saved = localStorage.getItem("selectedJiraProjectKeys");
@@ -380,6 +257,19 @@ function Logger() {
   const [manualDate, setManualDate] = useState("");
   const [manualHours, setManualHours] = useState("");
   const [manualMinutes, setManualMinutes] = useState("");
+  const [manualTaskReminder, setManualTaskReminder] = useState("");
+  const [manualFavoritesOnly, setManualFavoritesOnly] = useState(false);
+  const [favoritePreferences, setFavoritePreferences] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("favoritePreferences") || "{}");
+      return { buttons: saved?.buttons === true, searchFirst: saved?.searchFirst !== false };
+    } catch {
+      return { buttons: false, searchFirst: true };
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem("favoritePreferences", JSON.stringify(favoritePreferences));
+  }, [favoritePreferences]);
   const [manualFocused, setManualFocused] = useState(null);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [editTicket, setEditTicket] = useState("");
@@ -412,7 +302,7 @@ function Logger() {
   });
 
   function sanitizeNotificationText(value, maxLength = 240) {
-    const text = String(value ?? "")
+    const sanitizedText = String(value ?? "")
       .replace(/https?:\/\/[^\s)]+/gi, "[url removed]")
       .replace(/\bwww\.[^\s)]+/gi, "[url removed]")
       .replace(/\b[^\s@]+@[^\s@]+\.[^\s@]+\b/g, "[email removed]")
@@ -421,8 +311,8 @@ function Logger() {
       .replace(/\s+/g, " ")
       .trim();
 
-    if (text.length <= maxLength) return text;
-    return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
+    if (sanitizedText.length <= maxLength) return sanitizedText;
+    return `${sanitizedText.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
   }
 
   function normalizeExternalErrorText(value) {
@@ -497,7 +387,7 @@ function Logger() {
     const date = new Date(timestamp);
     if (Number.isNaN(date.getTime())) return "";
 
-    return date.toLocaleTimeString([], {
+    return date.toLocaleTimeString(appLanguage === "en" ? "en-GB" : "nb-NO", {
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -893,11 +783,17 @@ function Logger() {
     return groups;
   }, [activeEntries]);
 
-  const filteredTickets = getMatchingJiraTickets(jiraTickets, search);
-  const visibleSearchTickets = isSearchOpen && search.trim() ? filteredTickets.slice(0, 5) : [];
-  const miniTicketSuggestions = miniTicket.trim() ? getMatchingJiraTickets(jiraTickets, miniTicket).slice(0, 5) : [];
+  const searchableTickets = useMemo(() => jiraTickets.filter(ticket => matchesProjectFilter(ticket, jiraProjectFilters)), [jiraTickets, jiraProjectFilters]);
+  const filteredTickets = getMatchingJiraTickets(searchableTickets, search, favoritePreferences.searchFirst);
+  const favoriteTickets = searchableTickets.filter((ticket) => ticket.favorite);
+  const visibleSearchTickets = isSearchOpen
+    ? (search.trim() ? filteredTickets : favoriteTickets).slice(0, 5)
+    : [];
+  const miniTicketSuggestions = (miniTicket.trim()
+    ? getMatchingJiraTickets(searchableTickets, miniTicket, favoritePreferences.searchFirst)
+    : favoriteTickets).slice(0, 5);
   const manualTicketSuggestions = manualEntryType === "ticket"
-    ? getMatchingJiraTickets(jiraTickets, manualTicket).slice(0, 5)
+    ? getMatchingJiraTickets(manualFavoritesOnly ? favoriteTickets : searchableTickets, manualTicket, favoritePreferences.searchFirst).slice(0, manualFavoritesOnly ? undefined : 5)
     : [];
 
   const selectedFavoriteTicket = useMemo(() => {
@@ -1173,6 +1069,7 @@ function Logger() {
 
   useEffect(() => {
     localStorage.setItem("appLanguage", appLanguage);
+    document.documentElement.lang = appLanguage === "no" ? "nb" : "en";
   }, [appLanguage]);
 
   useEffect(() => {
@@ -2026,7 +1923,7 @@ function Logger() {
   function handleSearchChange(value) {
     setSearch(value);
     setSelectedTicket(value);
-    setIsSearchOpen(Boolean(value.trim()));
+    setIsSearchOpen(true);
     setHighlightedTicketIndex(-1);
   }
 
@@ -2168,7 +2065,7 @@ function Logger() {
     const timestamp = Date.now();
 
     if (!value) {
-      setMessage("Velg eller skriv inn en ticket først");
+      setMessage(text.selectTicketFirst);
       return;
     }
 
@@ -2276,7 +2173,7 @@ function Logger() {
 
   function handlePauseCurrent() {
     if (activeEntryId == null) {
-      setMessage("Ingen aktiv ticket");
+      setMessage(text.noActiveTicket);
       return;
     }
 
@@ -2426,7 +2323,7 @@ function Logger() {
     const title = todoDraft.title.trim();
 
     if (!title) {
-      setMessage("Skriv inn en task");
+      setMessage(text.enterTask);
       return;
     }
 
@@ -2450,7 +2347,7 @@ function Logger() {
       sourceTicket: "",
     });
     setTodoView("list");
-    setMessage("Task lagt til");
+      setMessage(text.taskAdded);
   }
 
   function getTodoTimerEntry(taskId) {
@@ -2484,7 +2381,7 @@ function Logger() {
       todoTaskId: task.id,
       todoNotes: task.notes || "",
     });
-    setMessage("Task timer startet");
+      setMessage(text.taskTimerStarted);
   }
 
   function toggleTodoTask(id) {
@@ -2541,7 +2438,7 @@ function Logger() {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "";
 
-    return date.toLocaleTimeString([], {
+    return date.toLocaleTimeString(appLanguage === "en" ? "en-GB" : "nb-NO", {
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -2608,7 +2505,7 @@ function Logger() {
     const existingEntry = getTodoTimerEntry(task.id);
 
     if (existingEntry?.id === activeEntryId) {
-      setMessage("Task timer kjører allerede");
+      setMessage(text.taskAlreadyRunning);
     } else {
       handleStartTodoTimer(task);
     }
@@ -2763,25 +2660,25 @@ function Logger() {
 
   function startMergeEntry(entry) {
     if (entry.status === "running") {
-      setMessage("Pause eller fullfør ticket før merge");
+      setMessage(text.pauseBeforeMerge);
       setTodoContextMenu(null);
       return;
     }
 
     if (entry.source === "todo" || entry.todoTaskId) {
-      setMessage("Task-logger kan ikke merges med tickets");
+      setMessage(text.cannotMergeTask);
       setTodoContextMenu(null);
       return;
     }
 
     setMergeSourceEntryId(entry.id);
     setTodoContextMenu(null);
-    setMessage("Velg ticket å merge inn i");
+      setMessage(text.selectMergeTarget);
   }
 
   function mergeEntryInto(targetEntry) {
     if (!canMergeEntryPair(mergeSourceEntry, targetEntry)) {
-      setMessage("Disse ticketene kan ikke merges");
+      setMessage(text.cannotMergeTickets);
       setTodoContextMenu(null);
       return;
     }
@@ -2932,6 +2829,8 @@ function Logger() {
     setEditingEntryId(null);
     setManualTicket(prefill);
     setManualEntryType(entryType);
+    setManualTaskReminder(getDefaultTodoReminder());
+    setManualFavoritesOnly(false);
     setManualDate(getTodayDate());
     setManualHours("");
     setManualMinutes("");
@@ -2971,6 +2870,7 @@ function Logger() {
   }
 
   function handleSaveSettings(nextSettings) {
+    setFavoritePreferences(nextSettings.favoritePreferences);
     setWorkSchedule(nextSettings.workSchedule);
     setDailyTargetSeconds(nextSettings.dailyTargetSeconds);
     setTrashRetentionDays(nextSettings.trashRetentionDays);
@@ -3465,6 +3365,7 @@ function Logger() {
     try {
       const result = await window.loggerAPI.jiraFetchTickets({
         projectKeys: selectedJiraProjectKeys,
+        projectFilters: jiraProjectFilters,
         query: jiraTicketQuery,
         maxResults: 5000,
       });
@@ -3555,12 +3456,39 @@ function Logger() {
 
   function handleSaveManualEntry() {
     if (!manualTicket.trim()) {
-      setMessage(manualEntryType === "task" ? "Skriv inn task-navn" : "Skriv inn ticket-navn");
+      setMessage(manualEntryType === "task" ? text.enterTaskName : text.enterTicketName);
+      return;
+    }
+
+    if (manualEntryType === "task") {
+      if (!manualTaskReminder || !Number.isFinite(new Date(manualTaskReminder).getTime())) {
+        setMessage(appLanguage === "en" ? "Choose a reminder date and time" : "Velg dato og klokkeslett for påminnelsen");
+        return;
+      }
+      setTodoTasks(prev => [{
+        id: Date.now(),
+        title: manualTicket.trim(),
+        priority: "normal",
+        reminder: manualTaskReminder,
+        notes: "",
+        sourceTicket: "",
+        done: false,
+        createdAt: new Date().toISOString(),
+      }, ...prev]);
+      setManualTicket("");
+      setManualTaskReminder("");
+      setManualEntryType("ticket");
+      setManualFocused(null);
+      setManualHighlightedTicketIndex(-1);
+      setShowManualModal(false);
+      setTodoView("list");
+      setMessageTone("success");
+      setMessage(appLanguage === "en" ? "Task reminder saved" : "Task med påminnelse lagret");
       return;
     }
 
     if (!manualDate) {
-      setMessage("Velg en dato");
+      setMessage(text.chooseDate);
       return;
     }
 
@@ -3569,7 +3497,7 @@ function Logger() {
     const totalSeconds = hours * 3600 + minutes * 60;
 
     if (totalSeconds <= 0) {
-      setMessage("Manuell tid må være større enn 0");
+      setMessage(text.positiveManualTime);
       return;
     }
 
@@ -3585,8 +3513,7 @@ function Logger() {
       status: "done",
       createdAt: manualDate,
       dateKey: manualDate,
-      source: manualEntryType === "task" ? "todo" : "manual",
-      ...(manualEntryType === "task" ? { todoTaskId: `manual-task-${timestamp}` } : {}),
+      source: "manual",
     };
 
     setEntries((prev) => {
@@ -3609,7 +3536,7 @@ function Logger() {
     setManualHighlightedTicketIndex(-1);
     setShowManualModal(false);
     setMessageTone("success");
-    setMessage(manualEntryType === "task" ? "Manual task saved" : "Manual entry saved");
+    setMessage("Manual entry saved");
 
     if (crossesDailyTarget) {
       notifyDailyTargetReached(todayLoggedSeconds + totalSeconds);
@@ -3630,12 +3557,12 @@ function Logger() {
     }
 
     if (!editTicket.trim()) {
-      setMessage("Skriv inn ticket-navn");
+      setMessage(text.enterTicketName);
       return;
     }
 
     if (!editDate) {
-      setMessage("Velg en dato");
+      setMessage(text.chooseDate);
       return;
     }
 
@@ -3736,15 +3663,15 @@ function Logger() {
   }
 
   async function handleCopyJiraFormat(preset = exportPreset) {
-    const text = getJiraCopyText(preset);
+    const copyText = getJiraCopyText(preset);
 
-    if (!text || text.startsWith("Total | 0m")) {
-      setMessage("Ingen entries å kopiere");
+    if (!copyText || copyText.startsWith("Total | 0m")) {
+      setMessage(text.nothingToCopy);
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(copyText);
       setMessageTone("success");
       setMessage("Copied Jira format");
     } catch (error) {
@@ -3777,7 +3704,7 @@ function Logger() {
     const entriesToExport = getExportEntriesForPreset(preset);
 
     if (!entriesToExport.length) {
-      setMessage("Ingen entries å eksportere");
+      setMessage(text.nothingToExport);
       return;
     }
 
@@ -3954,14 +3881,16 @@ function Logger() {
               selectMiniTicket(ticket);
             }}
           >
-            <strong>{ticket.id}</strong>
+            <strong>{ticket.favorite ? "★ " : ""}{ticket.id}</strong>
             {ticket.title && <span>{ticket.title}</span>}
           </button>
         </li>
       ))}
     </ul>
   );
-  const canSaveManual = Boolean(manualTicket.trim() && (manualHours || manualMinutes));
+  const canSaveManual = Boolean(manualTicket.trim() && (manualEntryType === "task"
+    ? manualTaskReminder && Number.isFinite(new Date(manualTaskReminder).getTime())
+    : manualDate && (manualHours || manualMinutes)));
   const manualTicketSuggestionList = manualTicketSuggestions.length > 0 && (
     <ul className="manual-ticket-suggestions" id="manual-ticket-suggestions" role="listbox">
       {manualTicketSuggestions.map((ticket, index) => (
@@ -3979,14 +3908,37 @@ function Logger() {
               selectManualTicket(ticket);
             }}
           >
-            <strong>{ticket.id}</strong>
+            <strong>{ticket.favorite ? "★ " : ""}{ticket.id}</strong>
             {ticket.title && <span>{ticket.title}</span>}
+          </button>
+          <button
+            type="button"
+            className="manual-favorite-toggle"
+            aria-label={`${ticket.favorite ? "Remove favorite" : "Add favorite"}: ${ticket.id}`}
+            aria-pressed={Boolean(ticket.favorite)}
+            onMouseDown={event => event.preventDefault()}
+            onClick={() => toggleFavorite(ticket.id)}
+          >
+            <Icon name={ticket.favorite ? "star" : "starOutline"} size={14} />
           </button>
         </li>
       ))}
     </ul>
   );
   const canSaveEdit = Boolean(editTicket.trim() && editDate && (editHours || editMinutes));
+  function renderFavoriteButtons(manual = false) {
+    if (!favoritePreferences.buttons || !favoriteTickets.length) return null;
+    return (
+      <div className="favorite-shortcuts" aria-label={appLanguage === "en" ? "Favorites" : "Favoritter"}>
+        {favoriteTickets.map(ticket => (
+          <button type="button" key={ticket.id} title={ticket.title}
+            onClick={() => manual ? selectManualTicket(ticket) : handleSelectTicket(ticket)}>
+            <Icon name="star" size={12} /> {ticket.id}
+          </button>
+        ))}
+      </div>
+    );
+  }
   const miniHasTicket = miniTicket.trim() !== "";
   const miniIsRunning = activeEntryId != null;
   const remainingPercent = Math.max(0, Math.min(100, (countdownSeconds / dailyTargetSeconds) * 100));
@@ -3996,7 +3948,7 @@ function Logger() {
         <div className="import-guide-header">
           <div>
             <h2>Import format</h2>
-            <p>CSV, TSV og TXT støttes</p>
+            <p>{text.importFormats}</p>
           </div>
           <button type="button" onClick={() => setShowImportGuide(false)} aria-label="Close import guide">
             <Icon name="close" size={13} />
@@ -4007,13 +3959,13 @@ function Logger() {
           <div>
             <span>Required</span>
             <strong>Ticket</strong>
-            <p>Kan også hete Ticket ID, ID eller Key.</p>
+            <p>{text.importTicketAliases}</p>
           </div>
 
           <div>
             <span>Optional</span>
             <strong>Title, Favorite, Date, Duration, Hours, Minutes</strong>
-            <p>Favorite støtter yes, true, 1, ja eller x.</p>
+            <p>{text.importFavoriteValues}</p>
           </div>
 
           <pre>{`Ticket;Date;Duration
@@ -4060,19 +4012,19 @@ PROJ-456;2026-05-11;2t`}</pre>
               <span><kbd>Alt</kbd><em>+</em><kbd>T</kbd></span>
             </div>
             <div>
-              <span>Hurtigfangst</span>
+              <span>{text.quickCapture}</span>
               <span><kbd>Ctrl</kbd><em>+</em><kbd>K</kbd></span>
             </div>
             <div>
-              <span>Påminnelser</span>
+              <span>{text.reminders}</span>
               <span><kbd>Alt</kbd><em>+</em><kbd>R</kbd></span>
             </div>
             <div>
-              <span>Avslutt dag</span>
+              <span>{text.endDay}</span>
               <span><kbd>Alt</kbd><em>+</em><kbd>E</kbd></span>
             </div>
             <div>
-              <span>Eksport</span>
+              <span>{text.export}</span>
               <span><kbd>Alt</kbd><em>+</em><kbd>X</kbd></span>
             </div>
             <div>
@@ -4105,7 +4057,7 @@ PROJ-456;2026-05-11;2t`}</pre>
         <div>
           <strong>{activeReminderTask.title}</strong>
           <span>
-            Kl. {formatReminderTime(activeReminderTask.reminder)}
+            {formatReminderTime(activeReminderTask.reminder)}
             {activeReminderTask.priority ? ` - ${activeReminderTask.priority} priority` : ""}
           </span>
         </div>
@@ -4125,7 +4077,7 @@ PROJ-456;2026-05-11;2t`}</pre>
           className="todo-reminder-snooze"
           onClick={() => setShowTodoSnoozeMenu((prev) => !prev)}
         >
-          Utsett
+          {text.snooze}
         </button>
 
         <button
@@ -4133,28 +4085,28 @@ PROJ-456;2026-05-11;2t`}</pre>
           className="todo-reminder-close"
           onClick={dismissTodoReminder}
         >
-          Lukk
+          {text.close}
         </button>
       </div>
 
       {showTodoSnoozeMenu && (
         <div className="todo-snooze-menu">
-          <span>Utsett påminnelse</span>
+          <span>{text.snoozeReminder}</span>
 
           <div className="todo-snooze-grid">
             <button type="button" onClick={() => snoozeTodoReminder(5)}>5 min</button>
             <button type="button" onClick={() => snoozeTodoReminder(15)}>15 min</button>
             <button type="button" onClick={() => snoozeTodoReminder(30)}>30 min</button>
-            <button type="button" onClick={() => snoozeTodoReminder(60)}>1 time</button>
-            <button type="button" onClick={snoozeTodoReminderUntilTomorrow}>I morgen</button>
+            <button type="button" onClick={() => snoozeTodoReminder(60)}>{text.oneHour}</button>
+            <button type="button" onClick={snoozeTodoReminderUntilTomorrow}>{text.tomorrow}</button>
           </div>
 
           <div className="todo-snooze-footer">
             <button type="button" className="todo-snooze-dismiss" onClick={dismissTodoReminder}>
-              Avvis
+              {text.dismiss}
             </button>
             <button type="button" className="todo-snooze-done" onClick={completeTodoReminder}>
-              Merk som ferdig
+              {text.markDone}
             </button>
           </div>
         </div>
@@ -4166,8 +4118,8 @@ PROJ-456;2026-05-11;2t`}</pre>
       <div className="todo-reminder-main">
         <span className="todo-reminder-icon"><Icon name="warning" size={13} /></span>
         <div>
-          <strong>Lagring begynner å bli full</strong>
-          <span>{storagePercent.toFixed(1)}% ledig lagring igjen</span>
+          <strong>{text.storageNearlyFull}</strong>
+          <span>{storagePercent.toFixed(1)}% {text.storageRemaining}</span>
         </div>
       </div>
 
@@ -4177,7 +4129,7 @@ PROJ-456;2026-05-11;2t`}</pre>
           className="todo-reminder-snooze"
           onClick={() => snoozeStorageWarning(24)}
         >
-          Utsett
+          {text.snooze}
         </button>
 
         <button
@@ -4185,7 +4137,7 @@ PROJ-456;2026-05-11;2t`}</pre>
           className="todo-reminder-close"
           onClick={dismissStorageWarning}
         >
-          Lukk
+          {text.close}
         </button>
       </div>
     </div>
@@ -4231,7 +4183,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               <div className="smart-item-actions">
                 <button type="button" onClick={() => startTaskReminder(task)}>Start</button>
                 <button type="button" onClick={() => snoozeTaskReminder(task, 15)}>15 min</button>
-                <button type="button" onClick={() => dismissTaskReminder(task)}>Lukk</button>
+                <button type="button" onClick={() => dismissTaskReminder(task)}>{text.close}</button>
                 <button type="button" className="success" onClick={() => completeTaskReminder(task)}>{text.done}</button>
               </div>
             </div>
@@ -4625,7 +4577,7 @@ PROJ-456;2026-05-11;2t`}</pre>
     <section className="todo-panel">
       <div className="todo-panel-header">
         <div>
-          <h2>{todoView === "new" ? (appLanguage === "en" ? "New task" : "Ny task") : text.tasks}</h2>
+          <h2>{todoView === "new" ? (appLanguage === "en" ? "New task" : text.newTask) : text.tasks}</h2>
           <span>{activeTodoCount} active</span>
         </div>
 
@@ -4635,7 +4587,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               type="button"
               className="todo-new-btn"
               onClick={openNewTodoView}
-              title="Ny task"
+              title={text.newTask}
             >
               <Icon name="plus" size={13} />
             </button>
@@ -4669,7 +4621,7 @@ PROJ-456;2026-05-11;2t`}</pre>
         }}
       >
         {todoDraft.sourceTicket && (
-          <span className="todo-source-badge">Fra ticket</span>
+          <span className="todo-source-badge">{text.fromTicket}</span>
         )}
 
           <input
@@ -4686,7 +4638,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             onChange={(event) =>
               setTodoDraft((prev) => ({ ...prev, notes: event.target.value }))
             }
-            placeholder="Notater"
+            placeholder={text.notes}
             rows={3}
           />
 
@@ -4696,11 +4648,11 @@ PROJ-456;2026-05-11;2t`}</pre>
             onChange={(event) =>
               setTodoDraft((prev) => ({ ...prev, priority: event.target.value }))
             }
-            aria-label="Prioritet"
+            aria-label={text.priority}
           >
-            <option value="low">Lav</option>
+            <option value="low">{text.low}</option>
             <option value="normal">Normal</option>
-            <option value="high">Høy</option>
+            <option value="high">{text.high}</option>
           </select>
 
           <input
@@ -4709,7 +4661,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             onChange={(event) =>
               setTodoDraft((prev) => ({ ...prev, reminder: event.target.value }))
             }
-            aria-label="Påminnelse"
+            aria-label={text.reminder}
           />
         </div>
 
@@ -4719,12 +4671,12 @@ PROJ-456;2026-05-11;2t`}</pre>
             className="todo-cancel-btn"
             onClick={() => setTodoView("list")}
           >
-            Avbryt
+            {text.cancel}
           </button>
 
           <button type="submit" className="todo-add-btn">
             <Icon name="plus" size={12} />
-            <span>Legg til task</span>
+            <span>{text.addTaskFull}</span>
           </button>
         </div>
       </form>
@@ -4752,10 +4704,10 @@ PROJ-456;2026-05-11;2t`}</pre>
         <div className="todo-list">
           {visibleTodoTasks.length === 0 ? (
             <div className="todo-empty-state">
-              <p>Ingen tasks enda</p>
+              <p>{text.noTasksYet}</p>
               <button type="button" onClick={openNewTodoView}>
                 <Icon name="plus" size={12} />
-                <span>Ny task</span>
+                <span>{text.newTask}</span>
               </button>
             </div>
           ) : (
@@ -4770,14 +4722,14 @@ PROJ-456;2026-05-11;2t`}</pre>
                 type="button"
                 className="todo-check-btn"
                 onClick={() => toggleTodoTask(task.id)}
-                title="Marker ferdig"
+                title={text.markComplete}
               >
               </button>
 
               <div className="todo-item-main">
                 <strong>{task.title}</strong>
                 <div className="todo-item-meta">
-                  {task.sourceTicket && <span className="todo-chip source">Fra ticket</span>}
+                  {task.sourceTicket && <span className="todo-chip source">{text.fromTicket}</span>}
                   <span className={`todo-chip priority ${task.priority}`}>{task.priority}</span>
                   <span className={`todo-chip reminder ${reminderStatus}`}>
                     {reminderStatus === "none"
@@ -4807,7 +4759,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                 type="button"
                 className="todo-delete-btn"
                 onClick={() => deleteTodoTask(task.id)}
-                title="Slett task"
+                title={text.deleteTask}
               >
                 <Icon name="trash" size={12} />
               </button>
@@ -4825,11 +4777,11 @@ PROJ-456;2026-05-11;2t`}</pre>
     <section className={isMiniMode ? "mini-manual-section" : "section manual-entry-top"}>
       <div className="modal-header">
         <div>
-          <h2>{manualEntryType === "task" ? "Manual Task" : "Manual Entry"}</h2>
+          <h2>{manualEntryType === "task" ? (appLanguage === "en" ? "New Task" : text.newTask) : "Manual Entry"}</h2>
           {!isMiniMode && (
             <p>
               {manualEntryType === "task"
-                ? "Log time for a task manually"
+                ? (appLanguage === "en" ? "Choose when to be reminded to do this task" : "Velg når du skal varsles om å gjøre tasken")
                 : "Log time for a ticket manually"}
             </p>
           )}
@@ -4868,7 +4820,51 @@ PROJ-456;2026-05-11;2t`}</pre>
             </button>
           </div>
 
-          {isMiniMode ? (
+          {manualEntryType === "ticket" && (
+            <>
+              <button type="button" className="manual-show-favorites" aria-pressed={manualFavoritesOnly}
+                onClick={() => {
+                  setManualFavoritesOnly(prev => !prev);
+                  setManualTicket("");
+                  setManualHighlightedTicketIndex(-1);
+                  manualTicketRef.current?.focus();
+                }}>
+                <Icon name="star" size={13} />
+                {manualFavoritesOnly
+                  ? (appLanguage === "en" ? "Show all tickets" : "Vis alle tickets")
+                  : (appLanguage === "en" ? "Show favorites" : "Vis favoritter")}
+                {` (${favoriteTickets.length})`}
+              </button>
+              {manualFavoritesOnly && !manualTicketSuggestions.length && (
+                <p>{appLanguage === "en" ? "No matching favorites. Star a ticket to save it here." : "Ingen matchende favoritter. Merk en ticket med stjerne for å lagre den her."}</p>
+              )}
+              {renderFavoriteButtons(true)}
+            </>
+          )}
+          {manualEntryType === "task" ? (
+            <>
+              <label className="manual-field-label" htmlFor="manual-task-title">Task</label>
+              <input
+                id="manual-task-title"
+                ref={manualTicketRef}
+                type="text"
+                value={manualTicket}
+                onChange={(event) => setManualTicket(event.target.value)}
+                placeholder={appLanguage === "en" ? "e.g. Write meeting notes" : "F.eks. skrive møtereferat"}
+                required
+              />
+              <label className="manual-field-label" htmlFor="manual-task-reminder">
+                {appLanguage === "en" ? "Reminder date & time" : "Dato og klokkeslett for varsling"}
+              </label>
+              <input
+                id="manual-task-reminder"
+                type="datetime-local"
+                value={manualTaskReminder}
+                onChange={(event) => setManualTaskReminder(event.target.value)}
+                required
+              />
+            </>
+          ) : isMiniMode ? (
             <>
               <div className="mini-manual-ticket-row">
                 <input
@@ -5038,7 +5034,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             disabled={!canSaveManual}
           >
             <Icon name="check" size={isMiniMode ? 12 : 13} color={canSaveManual ? "#fff" : "#446"} />
-            Save Entry
+            {manualEntryType === "task" ? (appLanguage === "en" ? "Save Task" : "Lagre task") : "Save Entry"}
           </button>
         </div>
       </form>
@@ -5474,7 +5470,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             <p className={`message-toast mini ${messageTone}`}>
               <span>{message}</span>
               {lastMergeUndo && message === "Tickets merged" && (
-                <button type="button" onClick={undoLastMerge}>Angre</button>
+                <button type="button" onClick={undoLastMerge}>{text.undo}</button>
               )}
             </p>
           )}
@@ -5548,14 +5544,14 @@ PROJ-456;2026-05-11;2t`}</pre>
                 onClick={() => mergeEntryInto(todoContextMenu.entry)}
               >
                 <Icon name="merge" size={13} />
-                <span>Merge inn her</span>
+                <span>{text.mergeHere}</span>
               </button>
             )}
 
             {mergeSourceEntry && (
               <button type="button" onClick={cancelMergeEntry}>
                 <Icon name="close" size={13} />
-                <span>Avbryt merge</span>
+                <span>{text.cancelMerge}</span>
               </button>
             )}
 
@@ -5577,13 +5573,13 @@ PROJ-456;2026-05-11;2t`}</pre>
 
             <button type="button" onClick={() => openTodoFromTicket(todoContextMenu.entry)}>
               <Icon name="todo" size={13} />
-              <span>Legg til som task</span>
+                <span>{text.addAsTask}</span>
             </button>
 
             {!mergeSourceEntry && (
               <button type="button" onClick={() => startMergeEntry(todoContextMenu.entry)}>
                 <Icon name="merge" size={13} />
-                <span>Velg for merge</span>
+                <span>{text.selectForMerge}</span>
               </button>
             )}
 
@@ -5596,7 +5592,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                 }}
               >
                 <Icon name="finish" size={13} />
-                <span>Merk ferdig</span>
+                <span>{text.markFinished}</span>
               </button>
             )}
 
@@ -5608,7 +5604,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               }}
             >
               <Icon name="export" size={13} />
-              <span>Eksporter</span>
+                <span>{text.exportAction}</span>
             </button>
 
             <button
@@ -5620,7 +5616,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               }}
             >
               <Icon name="trash" size={13} />
-              <span>Slett</span>
+                <span>{text.deleteAction}</span>
             </button>
           </div>
         )}
@@ -5630,7 +5626,7 @@ PROJ-456;2026-05-11;2t`}</pre>
             <p className={`message-toast ${messageTone}`}>
               <span>{message}</span>
               {lastMergeUndo && message === "Tickets merged" && (
-                <button type="button" onClick={undoLastMerge}>Angre</button>
+                <button type="button" onClick={undoLastMerge}>{text.undo}</button>
               )}
             </p>
           )}
@@ -5673,6 +5669,9 @@ PROJ-456;2026-05-11;2t`}</pre>
               tempoFeedback={tempoFeedback}
               tempoSyncResults={tempoSyncResults}
               jiraProjects={jiraProjects}
+              favoritePreferences={favoritePreferences}
+              jiraProjectFilters={jiraProjectFilters}
+              onChangeJiraProjectFilter={(key, value) => setJiraProjectFilters(prev => ({ ...prev, [key]: value }))}
               selectedJiraProjectKeys={selectedJiraProjectKeys}
               jiraTicketQuery={jiraTicketQuery}
               isJiraFetchingTickets={isJiraFetchingTickets}
@@ -5828,6 +5827,7 @@ PROJ-456;2026-05-11;2t`}</pre>
               )}
 
               <section className="section ticket-controls">
+                {renderFavoriteButtons()}
                 <div className="search-row search-row-with-icon">
                   <span className="search-icon">
                     <Icon name="search" size={13} />
@@ -5837,7 +5837,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                     type="text"
                     value={search}
                     onChange={(e) => handleSearchChange(e.target.value)}
-                    onFocus={() => setIsSearchOpen(Boolean(search.trim()))}
+                    onFocus={() => setIsSearchOpen(true)}
                     onKeyDown={handleSearchKeyDown}
                     placeholder={text.ticketSearchPlaceholder}
                     aria-activedescendant={
@@ -5946,7 +5946,7 @@ PROJ-456;2026-05-11;2t`}</pre>
                     type="text"
                     value={search}
                     onChange={(e) => handleSearchChange(e.target.value)}
-                    onFocus={() => setIsSearchOpen(Boolean(search.trim()))}
+                    onFocus={() => setIsSearchOpen(true)}
                     onKeyDown={handleSearchKeyDown}
                     placeholder="Type or search ticket"
                     aria-controls="ticket-search-results"

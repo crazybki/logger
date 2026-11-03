@@ -10,6 +10,28 @@ const tickets = [
 ];
 
 describe("Jira ticket search priority", () => {
+  it("allows favorite priority to be disabled without losing favorites", () => {
+    const input = [...tickets, { id: "AC-9", title: "Acme follow-up", favorite: true }];
+    expect(getMatchingJiraTickets(input, "acme", false).map(ticket => ticket.id))
+      .toEqual(["AC-3", "AC-4", "AC-1", "AC-2", "AC-9"]);
+    expect(getMatchingJiraTickets(input, "", false)).toEqual(input);
+    expect(getMatchingJiraTickets(input, "acme", true)[0].id).toBe("AC-9");
+  });
+  it("puts matching favorites before other results, before limiting suggestions", () => {
+    const favorite = { id: "AC-9", title: "Acme follow-up", favorite: true };
+    const unrelatedFavorite = { id: "ZZ-9", title: "Unrelated", favorite: true };
+    const results = getMatchingJiraTickets([...tickets, unrelatedFavorite, favorite], "acme");
+    expect(results.map(ticket => ticket.id)).toEqual(["AC-9", "AC-3", "AC-4", "AC-1", "AC-2"]);
+    expect(results.slice(0, 5)).toContain(favorite);
+  });
+  it("shows favorites first for an empty search without mutating stored tickets", () => {
+    const favorite = { id: "ZZ-9", title: "Saved ticket", favorite: true };
+    const input = [...tickets, favorite];
+    expect(getMatchingJiraTickets(input, "  ")).toEqual([favorite, ...tickets]);
+    expect(input).toEqual([...tickets, favorite]);
+    expect(getMatchingJiraTickets([...tickets, { ...favorite, favorite: false }], "").map(ticket => ticket.id))
+      .toEqual([...tickets.map(ticket => ticket.id), "ZZ-9"]);
+  });
   it("ranks both support/live formats first without dropping other results", () => {
     expect(getMatchingJiraTickets(tickets, "acme").map(ticket => ticket.id)).toEqual(["AC-3", "AC-4", "AC-1", "AC-2"]);
   });

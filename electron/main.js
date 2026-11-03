@@ -759,8 +759,9 @@ function normalizeJiraTicket(issue = {}) {
   };
 }
 
-function buildJiraTicketJql(projectKeys, query) {
+function buildJiraTicketJql(projectKeys, query, projectClause = "") {
   const clauses = [];
+  if (projectClause) clauses.push(projectClause);
   const safeProjectKeys = sanitizeJiraProjectKeys(projectKeys);
   const safeQuery = truncateText(query, 120);
 
@@ -1866,6 +1867,9 @@ ipcMain.handle("jira:list-projects", async () => {
 
 ipcMain.handle("jira:fetch-tickets", async (_, options = {}) => {
   try {
+    const { matchesProjectFilter, projectFilterJql } = await import("./jiraProjectFilters.mjs");
+    const projectFilters = options?.projectFilters || {};
+    const projectClause = projectFilterJql(projectFilters);
     const { jiraBaseUrl, jiraMode, authHeader } = await getJiraConnectionDetails();
     const projectKeys = sanitizeJiraProjectKeys(options?.projectKeys);
     const query = truncateText(options?.query, 120);
@@ -1873,7 +1877,7 @@ ipcMain.handle("jira:fetch-tickets", async (_, options = {}) => {
       1,
       Math.min(MAX_JIRA_FETCH_TICKETS, Math.floor(Number(options?.maxResults) || 50))
     );
-    const jql = buildJiraTicketJql(projectKeys, query);
+    const jql = buildJiraTicketJql(projectKeys, query, projectClause);
     const issues = [];
     let hasMore = false;
 
@@ -1978,7 +1982,7 @@ ipcMain.handle("jira:fetch-tickets", async (_, options = {}) => {
     hasMore = primaryResult.hasMore;
 
     if (query) {
-      const broadJql = buildJiraTicketJql(projectKeys, "");
+      const broadJql = buildJiraTicketJql(projectKeys, "", projectClause);
       const broadResult = await fetchIssuesForJql(broadJql);
 
       if (!broadResult.ok) {
@@ -2005,6 +2009,7 @@ ipcMain.handle("jira:fetch-tickets", async (_, options = {}) => {
       .map(normalizeJiraTicket)
       .filter(Boolean)
       .filter((ticket) => jiraTicketMatchesTextQuery(ticket, query))
+      .filter((ticket) => matchesProjectFilter(ticket, projectFilters))
       .slice(0, maxResults);
 
     return {
